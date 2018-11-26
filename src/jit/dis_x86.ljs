@@ -1,0 +1,953 @@
+//--------------------------------------------------------------------------
+// LuaJIT x86/x64 disassembler module.
+//
+// Copyright (C) 2005-2017 Mike Pall. All rights reserved.
+// Released under the MIT license. See Copyright Notice in luajit.h
+//--------------------------------------------------------------------------
+// This is a helper module used by the LuaJIT machine code dumper module.
+//
+// Sending small code snippets to an external disassembler and mixing the
+// output with our own stuff was too fragile. So I had to bite the bullet
+// and write yet another x86 disassembler. Oh well ...
+//
+// The output format is very similar to what ndisasm generates. But it has
+// been developed independently by looking at the opcode tables from the
+// Intel and AMD manuals. The supported instruction set is quite extensive
+// and reflects what a current generation Intel or AMD CPU implements in
+// 32 bit and 64 bit mode. Yes, this includes MMX, SSE, SSE2, SSE3, SSSE3,
+// SSE4.1, SSE4.2, SSE4a, AVX, AVX2 and even privileged and hypervisor
+// (VMX/SVM) instructions.
+//
+// Notes:
+// * The (useless) a16 prefix, 3DNow and pre-586 opcodes are unsupported.
+// * No attempt at optimization has been made -- it's fast enough for my needs.
+//----------------------------------------------------------------------------
+
+var type = type
+var sub, byte, format = string.sub, string.byte, string.format
+var match, gmatch, gsub = string.match, string.gmatch, string.gsub
+var lower, rep = string.lower, string.rep
+var bit = require("bit")
+var tohex = bit.tohex
+
+// Map for 1st opcode byte in 32 bit mode. Ugly? Well ... read on.
+var map_opc1_32 = {
+//0x
+[0]="addBmr","addVmr","addBrm","addVrm","addBai","addVai","push es","pop es",
+"orBmr","orVmr","orBrm","orVrm","orBai","orVai","push cs","opc2*",
+//1x
+"adcBmr","adcVmr","adcBrm","adcVrm","adcBai","adcVai","push ss","pop ss",
+"sbbBmr","sbbVmr","sbbBrm","sbbVrm","sbbBai","sbbVai","push ds","pop ds",
+//2x
+"andBmr","andVmr","andBrm","andVrm","andBai","andVai","es:seg","daa",
+"subBmr","subVmr","subBrm","subVrm","subBai","subVai","cs:seg","das",
+//3x
+"xorBmr","xorVmr","xorBrm","xorVrm","xorBai","xorVai","ss:seg","aaa",
+"cmpBmr","cmpVmr","cmpBrm","cmpVrm","cmpBai","cmpVai","ds:seg","aas",
+//4x
+"incVR","incVR","incVR","incVR","incVR","incVR","incVR","incVR",
+"decVR","decVR","decVR","decVR","decVR","decVR","decVR","decVR",
+//5x
+"pushUR","pushUR","pushUR","pushUR","pushUR","pushUR","pushUR","pushUR",
+"popUR","popUR","popUR","popUR","popUR","popUR","popUR","popUR",
+//6x
+"sz*pushaw,pusha","sz*popaw,popa","boundVrm","arplWmr",
+"fs:seg","gs:seg","o16:","a16",
+"pushUi","imulVrmi","pushBs","imulVrms",
+"insb","insVS","outsb","outsVS",
+//7x
+"joBj","jnoBj","jbBj","jnbBj","jzBj","jnzBj","jbeBj","jaBj",
+"jsBj","jnsBj","jpeBj","jpoBj","jlBj","jgeBj","jleBj","jgBj",
+//8x
+"arith!Bmi","arith!Vmi","arith!Bmi","arith!Vms",
+"testBmr","testVmr","xchgBrm","xchgVrm",
+"movBmr","movVmr","movBrm","movVrm",
+"movVmg","leaVrm","movWgm","popUm",
+//9x
+"nop*xchgVaR|pause|xchgWaR|repne nop","xchgVaR","xchgVaR","xchgVaR",
+"xchgVaR","xchgVaR","xchgVaR","xchgVaR",
+"sz*cbw,cwde,cdqe","sz*cwd,cdq,cqo","call farViw","wait",
+"sz*pushfw,pushf","sz*popfw,popf","sahf","lahf",
+//Ax
+"movBao","movVao","movBoa","movVoa",
+"movsb","movsVS","cmpsb","cmpsVS",
+"testBai","testVai","stosb","stosVS",
+"lodsb","lodsVS","scasb","scasVS",
+//Bx
+"movBRi","movBRi","movBRi","movBRi","movBRi","movBRi","movBRi","movBRi",
+"movVRI","movVRI","movVRI","movVRI","movVRI","movVRI","movVRI","movVRI",
+//Cx
+"shift!Bmu","shift!Vmu","retBw","ret","vex*3$lesVrm","vex*2$ldsVrm","movBmi","movVmi",
+"enterBwu","leave","retfBw","retf","int3","intBu","into","iretVS",
+//Dx
+"shift!Bm1","shift!Vm1","shift!Bmc","shift!Vmc","aamBu","aadBu","salc","xlatb",
+"fp*0","fp*1","fp*2","fp*3","fp*4","fp*5","fp*6","fp*7",
+//Ex
+"loopneBj","loopeBj","loopBj","sz*jcxzBj,jecxzBj,jrcxzBj",
+"inBau","inVau","outBua","outVua",
+"callVj","jmpVj","jmp farViw","jmpBj","inBad","inVad","outBda","outVda",
+//Fx
+"lock:","int1","repne:rep","rep:","hlt","cmc","testb!Bm","testv!Vm",
+"clc","stc","cli","sti","cld","std","incb!Bm","incd!Vm",
+}
+assert(#map_opc1_32 == 255)
+
+// Map for 1st opcode byte in 64 bit mode (overrides only).
+var map_opc1_64 = setmetatable({
+  [0x06]=false, [0x07]=false, [0x0e]=false,
+  [0x16]=false, [0x17]=false, [0x1e]=false, [0x1f]=false,
+  [0x27]=false, [0x2f]=false, [0x37]=false, [0x3f]=false,
+  [0x60]=false, [0x61]=false, [0x62]=false, [0x63]="movsxdVrDmt", [0x67]="a32:",
+  [0x40]="rex*",   [0x41]="rex*b",   [0x42]="rex*x",   [0x43]="rex*xb",
+  [0x44]="rex*r",  [0x45]="rex*rb",  [0x46]="rex*rx",  [0x47]="rex*rxb",
+  [0x48]="rex*w",  [0x49]="rex*wb",  [0x4a]="rex*wx",  [0x4b]="rex*wxb",
+  [0x4c]="rex*wr", [0x4d]="rex*wrb", [0x4e]="rex*wrx", [0x4f]="rex*wrxb",
+  [0x82]=false, [0x9a]=false, [0xc4]="vex*3", [0xc5]="vex*2", [0xce]=false,
+  [0xd4]=false, [0xd5]=false, [0xd6]=false, [0xea]=false,
+}, { __index = map_opc1_32 })
+
+// Map for 2nd opcode byte (0F xx). True CISC hell. Hey, I told you.
+// Prefix dependent MMX/SSE opcodes: (none)|rep|o16|repne, -|F3|66|F2
+var map_opc2 = {
+//0x
+[0]="sldt!Dmp","sgdt!Ump","larVrm","lslVrm",null,"syscall","clts","sysret",
+"invd","wbinvd",null,"ud1",null,"$prefetch!Bm","femms","3dnowMrmu",
+//1x
+"movupsXrm|movssXrvm|movupdXrm|movsdXrvm",
+"movupsXmr|movssXmvr|movupdXmr|movsdXmvr",
+"movhlpsXrm$movlpsXrm|movsldupXrm|movlpdXrm|movddupXrm",
+"movlpsXmr||movlpdXmr",
+"unpcklpsXrvm||unpcklpdXrvm",
+"unpckhpsXrvm||unpckhpdXrvm",
+"movlhpsXrm$movhpsXrm|movshdupXrm|movhpdXrm",
+"movhpsXmr||movhpdXmr",
+"$prefetcht!Bm","hintnopVm","hintnopVm","hintnopVm",
+"hintnopVm","hintnopVm","hintnopVm","hintnopVm",
+//2x
+"movUmx$","movUmy$","movUxm$","movUym$","movUmz$",null,"movUzm$",null,
+"movapsXrm||movapdXrm",
+"movapsXmr||movapdXmr",
+"cvtpi2psXrMm|cvtsi2ssXrvVmt|cvtpi2pdXrMm|cvtsi2sdXrvVmt",
+"movntpsXmr|movntssXmr|movntpdXmr|movntsdXmr",
+"cvttps2piMrXm|cvttss2siVrXm|cvttpd2piMrXm|cvttsd2siVrXm",
+"cvtps2piMrXm|cvtss2siVrXm|cvtpd2piMrXm|cvtsd2siVrXm",
+"ucomissXrm||ucomisdXrm",
+"comissXrm||comisdXrm",
+//3x
+"wrmsr","rdtsc","rdmsr","rdpmc","sysenter","sysexit",null,"getsec",
+"opc3*38",null,"opc3*3a",null,null,null,null,null,
+//4x
+"cmovoVrm","cmovnoVrm","cmovbVrm","cmovnbVrm",
+"cmovzVrm","cmovnzVrm","cmovbeVrm","cmovaVrm",
+"cmovsVrm","cmovnsVrm","cmovpeVrm","cmovpoVrm",
+"cmovlVrm","cmovgeVrm","cmovleVrm","cmovgVrm",
+//5x
+"movmskpsVrXm$||movmskpdVrXm$","sqrtpsXrm|sqrtssXrm|sqrtpdXrm|sqrtsdXrm",
+"rsqrtpsXrm|rsqrtssXrvm","rcppsXrm|rcpssXrvm",
+"andpsXrvm||andpdXrvm","andnpsXrvm||andnpdXrvm",
+"orpsXrvm||orpdXrvm","xorpsXrvm||xorpdXrvm",
+"addpsXrvm|addssXrvm|addpdXrvm|addsdXrvm","mulpsXrvm|mulssXrvm|mulpdXrvm|mulsdXrvm",
+"cvtps2pdXrm|cvtss2sdXrvm|cvtpd2psXrm|cvtsd2ssXrvm",
+"cvtdq2psXrm|cvttps2dqXrm|cvtps2dqXrm",
+"subpsXrvm|subssXrvm|subpdXrvm|subsdXrvm","minpsXrvm|minssXrvm|minpdXrvm|minsdXrvm",
+"divpsXrvm|divssXrvm|divpdXrvm|divsdXrvm","maxpsXrvm|maxssXrvm|maxpdXrvm|maxsdXrvm",
+//6x
+"punpcklbwPrvm","punpcklwdPrvm","punpckldqPrvm","packsswbPrvm",
+"pcmpgtbPrvm","pcmpgtwPrvm","pcmpgtdPrvm","packuswbPrvm",
+"punpckhbwPrvm","punpckhwdPrvm","punpckhdqPrvm","packssdwPrvm",
+"||punpcklqdqXrvm","||punpckhqdqXrvm",
+"movPrVSm","movqMrm|movdquXrm|movdqaXrm",
+//7x
+"pshufwMrmu|pshufhwXrmu|pshufdXrmu|pshuflwXrmu","pshiftw!Pvmu",
+"pshiftd!Pvmu","pshiftq!Mvmu||pshiftdq!Xvmu",
+"pcmpeqbPrvm","pcmpeqwPrvm","pcmpeqdPrvm","emms*|",
+"vmreadUmr||extrqXmuu$|insertqXrmuu$","vmwriteUrm||extrqXrm$|insertqXrm$",
+null,null,
+"||haddpdXrvm|haddpsXrvm","||hsubpdXrvm|hsubpsXrvm",
+"movVSmMr|movqXrm|movVSmXr","movqMmr|movdquXmr|movdqaXmr",
+//8x
+"joVj","jnoVj","jbVj","jnbVj","jzVj","jnzVj","jbeVj","jaVj",
+"jsVj","jnsVj","jpeVj","jpoVj","jlVj","jgeVj","jleVj","jgVj",
+//9x
+"setoBm","setnoBm","setbBm","setnbBm","setzBm","setnzBm","setbeBm","setaBm",
+"setsBm","setnsBm","setpeBm","setpoBm","setlBm","setgeBm","setleBm","setgBm",
+//Ax
+"push fs","pop fs","cpuid","btVmr","shldVmru","shldVmrc",null,null,
+"push gs","pop gs","rsm","btsVmr","shrdVmru","shrdVmrc","fxsave!Dmp","imulVrm",
+//Bx
+"cmpxchgBmr","cmpxchgVmr","$lssVrm","btrVmr",
+"$lfsVrm","$lgsVrm","movzxVrBmt","movzxVrWmt",
+"|popcntVrm","ud2Dp","bt!Vmu","btcVmr",
+"bsfVrm","bsrVrm|lzcntVrm|bsrWrm","movsxVrBmt","movsxVrWmt",
+//Cx
+"xaddBmr","xaddVmr",
+"cmppsXrvmu|cmpssXrvmu|cmppdXrvmu|cmpsdXrvmu","$movntiVmr|",
+"pinsrwPrvWmu","pextrwDrPmu",
+"shufpsXrvmu||shufpdXrvmu","$cmpxchg!Qmp",
+"bswapVR","bswapVR","bswapVR","bswapVR","bswapVR","bswapVR","bswapVR","bswapVR",
+//Dx
+"||addsubpdXrvm|addsubpsXrvm","psrlwPrvm","psrldPrvm","psrlqPrvm",
+"paddqPrvm","pmullwPrvm",
+"|movq2dqXrMm|movqXmr|movdq2qMrXm$","pmovmskbVrMm||pmovmskbVrXm",
+"psubusbPrvm","psubuswPrvm","pminubPrvm","pandPrvm",
+"paddusbPrvm","padduswPrvm","pmaxubPrvm","pandnPrvm",
+//Ex
+"pavgbPrvm","psrawPrvm","psradPrvm","pavgwPrvm",
+"pmulhuwPrvm","pmulhwPrvm",
+"|cvtdq2pdXrm|cvttpd2dqXrm|cvtpd2dqXrm","$movntqMmr||$movntdqXmr",
+"psubsbPrvm","psubswPrvm","pminswPrvm","porPrvm",
+"paddsbPrvm","paddswPrvm","pmaxswPrvm","pxorPrvm",
+//Fx
+"|||lddquXrm","psllwPrvm","pslldPrvm","psllqPrvm",
+"pmuludqPrvm","pmaddwdPrvm","psadbwPrvm","maskmovqMrm||maskmovdquXrm$",
+"psubbPrvm","psubwPrvm","psubdPrvm","psubqPrvm",
+"paddbPrvm","paddwPrvm","padddPrvm","ud",
+}
+assert(map_opc2[255] == "ud")
+
+// Map for three-byte opcodes. Can't wait for their next invention.
+var map_opc3 = {
+["38"] = { // [66] 0f 38 xx
+//0x
+[0]="pshufbPrvm","phaddwPrvm","phadddPrvm","phaddswPrvm",
+"pmaddubswPrvm","phsubwPrvm","phsubdPrvm","phsubswPrvm",
+"psignbPrvm","psignwPrvm","psigndPrvm","pmulhrswPrvm",
+"||permilpsXrvm","||permilpdXrvm",null,null,
+//1x
+"||pblendvbXrma",null,null,null,
+"||blendvpsXrma","||blendvpdXrma","||permpsXrvm","||ptestXrm",
+"||broadcastssXrm","||broadcastsdXrm","||broadcastf128XrlXm",null,
+"pabsbPrm","pabswPrm","pabsdPrm",null,
+//2x
+"||pmovsxbwXrm","||pmovsxbdXrm","||pmovsxbqXrm","||pmovsxwdXrm",
+"||pmovsxwqXrm","||pmovsxdqXrm",null,null,
+"||pmuldqXrvm","||pcmpeqqXrvm","||$movntdqaXrm","||packusdwXrvm",
+"||maskmovpsXrvm","||maskmovpdXrvm","||maskmovpsXmvr","||maskmovpdXmvr",
+//3x
+"||pmovzxbwXrm","||pmovzxbdXrm","||pmovzxbqXrm","||pmovzxwdXrm",
+"||pmovzxwqXrm","||pmovzxdqXrm","||permdXrvm","||pcmpgtqXrvm",
+"||pminsbXrvm","||pminsdXrvm","||pminuwXrvm","||pminudXrvm",
+"||pmaxsbXrvm","||pmaxsdXrvm","||pmaxuwXrvm","||pmaxudXrvm",
+//4x
+"||pmulddXrvm","||phminposuwXrm",null,null,
+null,"||psrlvVSXrvm","||psravdXrvm","||psllvVSXrvm",
+//5x
+[0x58] = "||pbroadcastdXrlXm",[0x59] = "||pbroadcastqXrlXm",
+[0x5a] = "||broadcasti128XrlXm",
+//7x
+[0x78] = "||pbroadcastbXrlXm",[0x79] = "||pbroadcastwXrlXm",
+//8x
+[0x8c] = "||pmaskmovXrvVSm",
+[0x8e] = "||pmaskmovVSmXvr",
+//9x
+[0x96] = "||fmaddsub132pHXrvm",[0x97] = "||fmsubadd132pHXrvm",
+[0x98] = "||fmadd132pHXrvm",[0x99] = "||fmadd132sHXrvm",
+[0x9a] = "||fmsub132pHXrvm",[0x9b] = "||fmsub132sHXrvm",
+[0x9c] = "||fnmadd132pHXrvm",[0x9d] = "||fnmadd132sHXrvm",
+[0x9e] = "||fnmsub132pHXrvm",[0x9f] = "||fnmsub132sHXrvm",
+//Ax
+[0xa6] = "||fmaddsub213pHXrvm",[0xa7] = "||fmsubadd213pHXrvm",
+[0xa8] = "||fmadd213pHXrvm",[0xa9] = "||fmadd213sHXrvm",
+[0xaa] = "||fmsub213pHXrvm",[0xab] = "||fmsub213sHXrvm",
+[0xac] = "||fnmadd213pHXrvm",[0xad] = "||fnmadd213sHXrvm",
+[0xae] = "||fnmsub213pHXrvm",[0xaf] = "||fnmsub213sHXrvm",
+//Bx
+[0xb6] = "||fmaddsub231pHXrvm",[0xb7] = "||fmsubadd231pHXrvm",
+[0xb8] = "||fmadd231pHXrvm",[0xb9] = "||fmadd231sHXrvm",
+[0xba] = "||fmsub231pHXrvm",[0xbb] = "||fmsub231sHXrvm",
+[0xbc] = "||fnmadd231pHXrvm",[0xbd] = "||fnmadd231sHXrvm",
+[0xbe] = "||fnmsub231pHXrvm",[0xbf] = "||fnmsub231sHXrvm",
+//Dx
+[0xdc] = "||aesencXrvm", [0xdd] = "||aesenclastXrvm",
+[0xde] = "||aesdecXrvm", [0xdf] = "||aesdeclastXrvm",
+//Fx
+[0xf0] = "|||crc32TrBmt",[0xf1] = "|||crc32TrVmt",
+[0xf7] = "| sarxVrmv| shlxVrmv| shrxVrmv",
+},
+
+["3a"] = { // [66] 0f 3a xx
+//0x
+[0x00]="||permqXrmu","||permpdXrmu","||pblenddXrvmu",null,
+"||permilpsXrmu","||permilpdXrmu","||perm2f128Xrvmu",null,
+"||roundpsXrmu","||roundpdXrmu","||roundssXrvmu","||roundsdXrvmu",
+"||blendpsXrvmu","||blendpdXrvmu","||pblendwXrvmu","palignrPrvmu",
+//1x
+null,null,null,null,
+"||pextrbVmXru","||pextrwVmXru","||pextrVmSXru","||extractpsVmXru",
+"||insertf128XrvlXmu","||extractf128XlXmYru",null,null,
+null,null,null,null,
+//2x
+"||pinsrbXrvVmu","||insertpsXrvmu","||pinsrXrvVmuS",null,
+//3x
+[0x38] = "||inserti128Xrvmu",[0x39] = "||extracti128XlXmYru",
+//4x
+[0x40] = "||dppsXrvmu",
+[0x41] = "||dppdXrvmu",
+[0x42] = "||mpsadbwXrvmu",
+[0x44] = "||pclmulqdqXrvmu",
+[0x46] = "||perm2i128Xrvmu",
+[0x4a] = "||blendvpsXrvmb",[0x4b] = "||blendvpdXrvmb",
+[0x4c] = "||pblendvbXrvmb",
+//6x
+[0x60] = "||pcmpestrmXrmu",[0x61] = "||pcmpestriXrmu",
+[0x62] = "||pcmpistrmXrmu",[0x63] = "||pcmpistriXrmu",
+[0xdf] = "||aeskeygenassistXrmu",
+//Fx
+[0xf0] = "||| rorxVrmu",
+},
+}
+
+// Map for VMX/SVM opcodes 0F 01 C0-FF (sgdt group with register operands).
+var map_opcvm = {
+[0xc1]="vmcall",[0xc2]="vmlaunch",[0xc3]="vmresume",[0xc4]="vmxoff",
+[0xc8]="monitor",[0xc9]="mwait",
+[0xd8]="vmrun",[0xd9]="vmmcall",[0xda]="vmload",[0xdb]="vmsave",
+[0xdc]="stgi",[0xdd]="clgi",[0xde]="skinit",[0xdf]="invlpga",
+[0xf8]="swapgs",[0xf9]="rdtscp",
+}
+
+// Map for FP opcodes. And you thought stack machines are simple?
+var map_opcfp = {
+// D8-DF 00-BF: opcodes with a memory operand.
+// D8
+[0]="faddFm","fmulFm","fcomFm","fcompFm","fsubFm","fsubrFm","fdivFm","fdivrFm",
+"fldFm",null,"fstFm","fstpFm","fldenvVm","fldcwWm","fnstenvVm","fnstcwWm",
+// DA
+"fiaddDm","fimulDm","ficomDm","ficompDm",
+"fisubDm","fisubrDm","fidivDm","fidivrDm",
+// DB
+"fildDm","fisttpDm","fistDm","fistpDm",null,"fld twordFmp",null,"fstp twordFmp",
+// DC
+"faddGm","fmulGm","fcomGm","fcompGm","fsubGm","fsubrGm","fdivGm","fdivrGm",
+// DD
+"fldGm","fisttpQm","fstGm","fstpGm","frstorDmp",null,"fnsaveDmp","fnstswWm",
+// DE
+"fiaddWm","fimulWm","ficomWm","ficompWm",
+"fisubWm","fisubrWm","fidivWm","fidivrWm",
+// DF
+"fildWm","fisttpWm","fistWm","fistpWm",
+"fbld twordFmp","fildQm","fbstp twordFmp","fistpQm",
+// xx C0-FF: opcodes with a pseudo-register operand.
+// D8
+"faddFf","fmulFf","fcomFf","fcompFf","fsubFf","fsubrFf","fdivFf","fdivrFf",
+// D9
+"fldFf","fxchFf",{"fnop"},null,
+{"fchs","fabs",null,null,"ftst","fxam"},
+{"fld1","fldl2t","fldl2e","fldpi","fldlg2","fldln2","fldz"},
+{"f2xm1","fyl2x","fptan","fpatan","fxtract","fprem1","fdecstp","fincstp"},
+{"fprem","fyl2xp1","fsqrt","fsincos","frndint","fscale","fsin","fcos"},
+// DA
+"fcmovbFf","fcmoveFf","fcmovbeFf","fcmovuFf",null,{null,"fucompp"},null,null,
+// DB
+"fcmovnbFf","fcmovneFf","fcmovnbeFf","fcmovnuFf",
+{null,null,"fnclex","fninit"},"fucomiFf","fcomiFf",null,
+// DC
+"fadd toFf","fmul toFf",null,null,
+"fsub toFf","fsubr toFf","fdivr toFf","fdiv toFf",
+// DD
+"ffreeFf",null,"fstFf","fstpFf","fucomFf","fucompFf",null,null,
+// DE
+"faddpFf","fmulpFf",null,{null,"fcompp"},
+"fsubrpFf","fsubpFf","fdivrpFf","fdivpFf",
+// DF
+null,null,null,null,{"fnstsw ax"},"fucomipFf","fcomipFf",null,
+}
+assert(map_opcfp[126] == "fcomipFf")
+
+// Map for opcode groups. The subkey is sp from the ModRM byte.
+var map_opcgroup = {
+  arith = { "add", "or", "adc", "sbb", "and", "sub", "xor", "cmp" },
+  shift = { "rol", "ror", "rcl", "rcr", "shl", "shr", "sal", "sar" },
+  testb = { "testBmi", "testBmi", "not", "neg", "mul", "imul", "div", "idiv" },
+  testv = { "testVmi", "testVmi", "not", "neg", "mul", "imul", "div", "idiv" },
+  incb = { "inc", "dec" },
+  incd = { "inc", "dec", "callUmp", "$call farDmp",
+	   "jmpUmp", "$jmp farDmp", "pushUm" },
+  sldt = { "sldt", "str", "lldt", "ltr", "verr", "verw" },
+  sgdt = { "vm*$sgdt", "vm*$sidt", "$lgdt", "vm*$lidt",
+	   "smsw", null, "lmsw", "vm*$invlpg" },
+  bt = { null, null, null, null, "bt", "bts", "btr", "btc" },
+  cmpxchg = { null, "sz*,cmpxchg8bQmp,cmpxchg16bXmp", null, null,
+	      null, null, "vmptrld|vmxon|vmclear", "vmptrst" },
+  pshiftw = { null, null, "psrlw", null, "psraw", null, "psllw" },
+  pshiftd = { null, null, "psrld", null, "psrad", null, "pslld" },
+  pshiftq = { null, null, "psrlq", null, null, null, "psllq" },
+  pshiftdq = { null, null, "psrlq", "psrldq", null, null, "psllq", "pslldq" },
+  fxsave = { "$fxsave", "$fxrstor", "$ldmxcsr", "$stmxcsr",
+	     null, "lfenceDp$", "mfenceDp$", "sfenceDp$clflush" },
+  prefetch = { "prefetch", "prefetchw" },
+  prefetcht = { "prefetchnta", "prefetcht0", "prefetcht1", "prefetcht2" },
+}
+
+//----------------------------------------------------------------------------
+
+// Maps for register names.
+var map_regs = {
+  B = { "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh",
+	"r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b" },
+  B64 = { "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil",
+	  "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b" },
+  W = { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
+	"r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" },
+  D = { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi",
+	"r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d" },
+  Q = { "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" },
+  M = { "mm0", "mm1", "mm2", "mm3", "mm4", "mm5", "mm6", "mm7",
+	"mm0", "mm1", "mm2", "mm3", "mm4", "mm5", "mm6", "mm7" }, // No x64 ext!
+  X = { "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
+	"xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15" },
+  Y = { "ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7",
+	"ymm8", "ymm9", "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15" },
+}
+var map_segregs = { "es", "cs", "ss", "ds", "fs", "gs", "segr6", "segr7" }
+
+// Maps for size names.
+var map_sz2n = {
+  B = 1, W = 2, D = 4, Q = 8, M = 8, X = 16, Y = 32,
+}
+var map_sz2prefix = {
+  B = "byte", W = "word", D = "dword",
+  Q = "qword",
+  M = "qword", X = "xword", Y = "yword",
+  F = "dword", G = "qword", // No need for sizes/register names for these two.
+}
+
+//----------------------------------------------------------------------------
+
+// Output a nicely formatted line with an opcode and operands.
+var function putop(ctx, text, operands) {
+  var code, pos, hex = ctx.code, ctx.pos, ""
+  var hmax = ctx.hexdump
+  if( hmax > 0 ) {
+    for( i=ctx.start,pos-1 ) {
+      hex = hex..format("%02X", byte(code, i, i))
+    }
+    if( #hex > hmax ) { hex = sub(hex, 1, hmax)..". "
+    } else { hex = hex..rep(" ", hmax-#hex+2) }
+  }
+  if( operands ) { text = text.." "..operands }
+  if( ctx.o16 ) { text = "o16 "..text; ctx.o16 = false }
+  if( ctx.a32 ) { text = "a32 "..text; ctx.a32 = false }
+  if( ctx.rep ) { text = ctx.rep.." "..text; ctx.rep = false }
+  if( ctx.rex ) {
+    var t = (ctx.rexw && "w" || "")..(ctx.rexr && "r" || "")..
+	      (ctx.rexx && "x" || "")..(ctx.rexb && "b" || "")..
+	      (ctx.vexl && "l" || "")
+    if( ctx.vexv && ctx.vexv != 0 ) { t = t.."v"..ctx.vexv }
+    if( t != "" ) { text = ctx.rex.."."..t.." "..gsub(text, "^ ", "")
+    } else if( ctx.rex == "vex" ) { text = gsub("v"..text, "^v ", "") }
+    ctx.rexw = false; ctx.rexr = false; ctx.rexx = false; ctx.rexb = false
+    ctx.rex = false; ctx.vexl = false; ctx.vexv = false
+  }
+  if( ctx.seg ) {
+    var text2, n = gsub(text, "%[", "["..ctx.seg..":")
+    if( n == 0 ) { text = ctx.seg.." "..text } else { text = text2 }
+    ctx.seg = false
+  }
+  if( ctx.lock ) { text = "lock "..text; ctx.lock = false }
+  var imm = ctx.imm
+  if( imm ) {
+    var sym = ctx.symtab[imm]
+    if( sym ) { text = text.."\t->"..sym }
+  }
+  ctx.out(format("%08x  %s%s\n", ctx.addr+ctx.start, hex, text))
+  ctx.mrm = false
+  ctx.vexv = false
+  ctx.start = pos
+  ctx.imm = null
+}
+
+// Clear all prefix flags.
+var function clearprefixes(ctx) {
+  ctx.o16 = false; ctx.seg = false; ctx.lock = false; ctx.rep = false
+  ctx.rexw = false; ctx.rexr = false; ctx.rexx = false; ctx.rexb = false
+  ctx.rex = false; ctx.a32 = false; ctx.vexl = false
+}
+
+// Fallback for incomplete opcodes at the end.
+var function incomplete(ctx) {
+  ctx.pos = ctx.stop+1
+  clearprefixes(ctx)
+  return putop(ctx, "(incomplete)")
+}
+
+// Fallback for unknown opcodes.
+var function unknown(ctx) {
+  clearprefixes(ctx)
+  return putop(ctx, "(unknown)")
+}
+
+// Return an immediate of the specified size.
+var function getimm(ctx, pos, n) {
+  if( pos+n-1 > ctx.stop ) { return incomplete(ctx) }
+  var code = ctx.code
+  if( n == 1 ) {
+    var b1 = byte(code, pos, pos)
+    return b1
+  } else if( n == 2 ) {
+    var b1, b2 = byte(code, pos, pos+1)
+    return b1+b2*256
+  } else {
+    var b1, b2, b3, b4 = byte(code, pos, pos+3)
+    var imm = b1+b2*256+b3*65536+b4*16777216
+    ctx.imm = imm
+    return imm
+  }
+}
+
+// Process pattern string and generate the operands.
+var function putpat(ctx, name, pat) {
+  var operands, regs, sz, mode, sp, rm, sc, rx, sdisp
+  var code, pos, stop, vexl = ctx.code, ctx.pos, ctx.stop, ctx.vexl
+
+  // Chars used: 1DFGHIMPQRSTUVWXYabcdfgijlmoprstuvwxyz
+  for( p in gmatch(pat, ".") ) {
+    var x = null
+    if( p == "V" || p == "U" ) {
+      if( ctx.rexw ) { sz = "Q"; ctx.rexw = false
+      } else if( ctx.o16 ) { sz = "W"; ctx.o16 = false
+      } else if( p == "U" && ctx.x64 ) { sz = "Q"
+      } else { sz = "D" }
+      regs = map_regs[sz]
+    } else if( p == "T" ) {
+      if( ctx.rexw ) { sz = "Q"; ctx.rexw = false } else { sz = "D" }
+      regs = map_regs[sz]
+    } else if( p == "B" ) {
+      sz = "B"
+      regs = ctx.rex && map_regs.B64 || map_regs.B
+    } else if( match(p, "[WDQMXYFG]") ) {
+      sz = p
+      if( sz == "X" && vexl ) { sz = "Y"; ctx.vexl = false }
+      regs = map_regs[sz]
+    } else if( p == "P" ) {
+      sz = ctx.o16 && "X" || "M"; ctx.o16 = false
+      if( sz == "X" && vexl ) { sz = "Y"; ctx.vexl = false }
+      regs = map_regs[sz]
+    } else if( p == "H" ) {
+      name = name..(ctx.rexw && "d" || "s")
+      ctx.rexw = false
+    } else if( p == "S" ) {
+      name = name..lower(sz)
+    } else if( p == "s" ) {
+      var imm = getimm(ctx, pos, 1); if( ! imm ) { return }
+      x = imm <= 127 && format("+0x%02x", imm)
+		     || format("-0x%02x", 256-imm)
+      pos = pos+1
+    } else if( p == "u" ) {
+      var imm = getimm(ctx, pos, 1); if( ! imm ) { return }
+      x = format("0x%02x", imm)
+      pos = pos+1
+    } else if( p == "b" ) {
+      var imm = getimm(ctx, pos, 1); if( ! imm ) { return }
+      x = regs[imm/16+1]
+      pos = pos+1
+    } else if( p == "w" ) {
+      var imm = getimm(ctx, pos, 2); if( ! imm ) { return }
+      x = format("0x%x", imm)
+      pos = pos+2
+    } else if( p == "o" ) { // [offset]
+      if( ctx.x64 ) {
+	var imm1 = getimm(ctx, pos, 4); if( ! imm1 ) { return }
+	var imm2 = getimm(ctx, pos+4, 4); if( ! imm2 ) { return }
+	x = format("[0x%08x%08x]", imm2, imm1)
+	pos = pos+8
+      } else {
+	var imm = getimm(ctx, pos, 4); if( ! imm ) { return }
+	x = format("[0x%08x]", imm)
+	pos = pos+4
+      }
+    } else if( p == "i" || p == "I" ) {
+      var n = map_sz2n[sz]
+      if( n == 8 && ctx.x64 && p == "I" ) {
+	var imm1 = getimm(ctx, pos, 4); if( ! imm1 ) { return }
+	var imm2 = getimm(ctx, pos+4, 4); if( ! imm2 ) { return }
+	x = format("0x%08x%08x", imm2, imm1)
+      } else {
+	if( n == 8 ) { n = 4 }
+	var imm = getimm(ctx, pos, n); if( ! imm ) { return }
+	if( sz == "Q" && (imm < 0 || imm > 0x7fffffff) ) {
+	  imm = (0xffffffff+1)-imm
+	  x = format(imm > 65535 && "-0x%08x" || "-0x%x", imm)
+	} else {
+	  x = format(imm > 65535 && "0x%08x" || "0x%x", imm)
+	}
+      }
+      pos = pos+n
+    } else if( p == "j" ) {
+      var n = map_sz2n[sz]
+      if( n == 8 ) { n = 4 }
+      var imm = getimm(ctx, pos, n); if( ! imm ) { return }
+      if( sz == "B" && imm > 127 ) { imm = imm-256
+      } else if( imm > 2147483647 ) { imm = imm-4294967296 }
+      pos = pos+n
+      imm = imm + pos + ctx.addr
+      if( imm > 4294967295 && ! ctx.x64 ) { imm = imm-4294967296 }
+      ctx.imm = imm
+      if( sz == "W" ) {
+	x = format("word 0x%04x", imm%65536)
+      } else if( ctx.x64 ) {
+	var lo = imm % 0x1000000
+	x = format("0x%02x%06x", (imm-lo) / 0x1000000, lo)
+      } else {
+	x = "0x"..tohex(imm)
+      }
+    } else if( p == "R" ) {
+      var r = byte(code, pos-1, pos-1)%8
+      if( ctx.rexb ) { r = r + 8; ctx.rexb = false }
+      x = regs[r+1]
+    } else if( p == "a" ) { x = regs[1]
+    } else if( p == "c" ) { x = "cl"
+    } else if( p == "d" ) { x = "dx"
+    } else if( p == "1" ) { x = "1"
+    } else {
+      if( ! mode ) {
+	mode = ctx.mrm
+	if( ! mode ) {
+	  if( pos > stop ) { return incomplete(ctx) }
+	  mode = byte(code, pos, pos)
+	  pos = pos+1
+	}
+	rm = mode%8; mode = (mode-rm)/8
+	sp = mode%8; mode = (mode-sp)/8
+	sdisp = ""
+	if( mode < 3 ) {
+	  if( rm == 4 ) {
+	    if( pos > stop ) { return incomplete(ctx) }
+	    sc = byte(code, pos, pos)
+	    pos = pos+1
+	    rm = sc%8; sc = (sc-rm)/8
+	    rx = sc%8; sc = (sc-rx)/8
+	    if( ctx.rexx ) { rx = rx + 8; ctx.rexx = false }
+	    if( rx == 4 ) { rx = null }
+	  }
+	  if( mode > 0 || rm == 5 ) {
+	    var dsz = mode
+	    if( dsz != 1 ) { dsz = 4 }
+	    var disp = getimm(ctx, pos, dsz); if( ! disp ) { return }
+	    if( mode == 0 ) { rm = null }
+	    if( rm || rx || (! sc && ctx.x64 && ! ctx.a32) ) {
+	      if( dsz == 1 && disp > 127 ) {
+		sdisp = format("-0x%x", 256-disp)
+	      } else if( disp >= 0 && disp <= 0x7fffffff ) {
+		sdisp = format("+0x%x", disp)
+	      } else {
+		sdisp = format("-0x%x", (0xffffffff+1)-disp)
+	      }
+	    } else {
+	      sdisp = format(ctx.x64 && ! ctx.a32 &&
+		! (disp >= 0 && disp <= 0x7fffffff)
+		&& "0xffffffff%08x" || "0x%08x", disp)
+	    }
+	    pos = pos+dsz
+	  }
+	}
+	if( rm && ctx.rexb ) { rm = rm + 8; ctx.rexb = false }
+	if( ctx.rexr ) { sp = sp + 8; ctx.rexr = false }
+      }
+      if( p == "m" ) {
+	if( mode == 3 ) { x = regs[rm+1]
+	} else {
+	  var aregs = ctx.a32 && map_regs.D || ctx.aregs
+	  var srm, srx = "", ""
+	  if( rm ) { srm = aregs[rm+1]
+	  } else if( ! sc && ctx.x64 && ! ctx.a32 ) { srm = "rip" }
+	  ctx.a32 = false
+	  if( rx ) {
+	    if( rm ) { srm = srm.."+" }
+	    srx = aregs[rx+1]
+	    if( sc > 0 ) { srx = srx.."*"..(2**sc) }
+	  }
+	  x = format("[%s%s%s]", srm, srx, sdisp)
+	}
+	if( mode < 3 &&
+	   (! match(pat, "[aRrgp]") || match(pat, "t")) ) { // Yuck.
+	  x = map_sz2prefix[sz].." "..x
+	}
+      } else if( p == "r" ) { x = regs[sp+1]
+      } else if( p == "g" ) { x = map_segregs[sp+1]
+      } else if( p == "p" ) { // Suppress prefix.
+      } else if( p == "f" ) { x = "st"..rm
+      } else if( p == "x" ) {
+	if( sp == 0 && ctx.lock && ! ctx.x64 ) {
+	  x = "CR8"; ctx.lock = false
+	} else {
+	  x = "CR"..sp
+	}
+      } else if( p == "v" ) {
+	if( ctx.vexv ) {
+	  x = regs[ctx.vexv+1]; ctx.vexv = false
+	}
+      } else if( p == "y" ) { x = "DR"..sp
+      } else if( p == "z" ) { x = "TR"..sp
+      } else if( p == "l" ) { vexl = false
+      } else if( p == "t" ) {
+      } else {
+	error("bad pattern `"..pat.."'")
+      }
+    }
+    if( x ) { operands = operands && operands..", "..x || x }
+  }
+  ctx.pos = pos
+  return putop(ctx, name, operands)
+}
+
+// Forward declaration.
+var map_act
+
+// Fetch and cache MRM byte.
+var function getmrm(ctx) {
+  var mrm = ctx.mrm
+  if( ! mrm ) {
+    var pos = ctx.pos
+    if( pos > ctx.stop ) { return null }
+    mrm = byte(ctx.code, pos, pos)
+    ctx.pos = pos+1
+    ctx.mrm = mrm
+  }
+  return mrm
+}
+
+// Dispatch to handler depending on pattern.
+var function dispatch(ctx, opat, patgrp) {
+  if( ! opat ) { return unknown(ctx) }
+  if( match(opat, "%|") ) { // MMX/SSE variants depending on prefix.
+    var p
+    if( ctx.rep ) {
+      p = ctx.rep=="rep" && "%|([^%|]*)" || "%|[^%|]*%|[^%|]*%|([^%|]*)"
+      ctx.rep = false
+    } else if( ctx.o16 ) { p = "%|[^%|]*%|([^%|]*)"; ctx.o16 = false
+    } else { p = "^[^%|]*" }
+    opat = match(opat, p)
+    if( ! opat ) { return unknown(ctx) }
+//    ctx.rep = false; ctx.o16 = false
+    //XXX fails for 66 f2 0f 38 f1 06  crc32 eax,WORD PTR [esi]
+    //XXX remove in branches?
+  }
+  if( match(opat, "%$") ) { // reg$mem variants.
+    var mrm = getmrm(ctx); if( ! mrm ) { return incomplete(ctx) }
+    opat = match(opat, mrm >= 192 && "^[^%$]*" || "%$(.*)")
+    if( opat == "" ) { return unknown(ctx) }
+  }
+  if( opat == "" ) { return unknown(ctx) }
+  var name, pat = match(opat, "^([a-z0-9 ]*)(.*)")
+  if( pat == "" && patgrp ) { pat = patgrp }
+  return map_act[sub(pat, 1, 1)](ctx, name, pat)
+}
+
+// Get a pattern from an opcode map and dispatch to handler.
+var function dispatchmap(ctx, opcmap) {
+  var pos = ctx.pos
+  var opat = opcmap[byte(ctx.code, pos, pos)]
+  pos = pos + 1
+  ctx.pos = pos
+  return dispatch(ctx, opat)
+}
+
+// Map for action codes. The key is the first char after the name.
+map_act = {
+  // Simple opcodes without operands.
+  [""] = function(ctx, name, pat) {
+    return putop(ctx, name)
+  },
+
+  // Operand size chars fall right through.
+  B = putpat, W = putpat, D = putpat, Q = putpat,
+  V = putpat, U = putpat, T = putpat,
+  M = putpat, X = putpat, P = putpat,
+  F = putpat, G = putpat, Y = putpat,
+  H = putpat,
+
+  // Collect prefixes.
+  [":"] = function(ctx, name, pat) {
+    ctx[pat == ":" && name || sub(pat, 2)] = name
+    if( ctx.pos - ctx.start > 5 ) { return unknown(ctx) } // Limit #prefixes.
+  },
+
+  // Chain to special handler specified by name.
+  ["*"] = function(ctx, name, pat) {
+    return map_act[name](ctx, name, sub(pat, 2))
+  },
+
+  // Use named subtable for opcode group.
+  ["!"] = function(ctx, name, pat) {
+    var mrm = getmrm(ctx); if( ! mrm ) { return incomplete(ctx) }
+    return dispatch(ctx, map_opcgroup[name][((mrm-(mrm%8))/8)%8+1], sub(pat, 2))
+  },
+
+  // o16,o32[,o64] variants.
+  sz = function(ctx, name, pat) {
+    if( ctx.o16 ) { ctx.o16 = false
+    } else {
+      pat = match(pat, ",(.*)")
+      if( ctx.rexw ) {
+	var p = match(pat, ",(.*)")
+	if( p ) { pat = p; ctx.rexw = false }
+      }
+    }
+    pat = match(pat, "^[^,]*")
+    return dispatch(ctx, pat)
+  },
+
+  // Two-byte opcode dispatch.
+  opc2 = function(ctx, name, pat) {
+    return dispatchmap(ctx, map_opc2)
+  },
+
+  // Three-byte opcode dispatch.
+  opc3 = function(ctx, name, pat) {
+    return dispatchmap(ctx, map_opc3[pat])
+  },
+
+  // VMX/SVM dispatch.
+  vm = function(ctx, name, pat) {
+    return dispatch(ctx, map_opcvm[ctx.mrm])
+  },
+
+  // Floating point opcode dispatch.
+  fp = function(ctx, name, pat) {
+    var mrm = getmrm(ctx); if( ! mrm ) { return incomplete(ctx) }
+    var rm = mrm%8
+    var idx = pat*8 + ((mrm-rm)/8)%8
+    if( mrm >= 192 ) { idx = idx + 64 }
+    var opat = map_opcfp[idx]
+    if( type(opat) == "table" ) { opat = opat[rm+1] }
+    return dispatch(ctx, opat)
+  },
+
+  // REX prefix.
+  rex = function(ctx, name, pat) {
+    if( ctx.rex ) { return unknown(ctx) } // Only 1 REX or VEX prefix allowed.
+    for( p in gmatch(pat, ".") ) { ctx["rex"..p] = true }
+    ctx.rex = "rex"
+  },
+
+  // VEX prefix.
+  vex = function(ctx, name, pat) {
+    if( ctx.rex ) { return unknown(ctx) } // Only 1 REX or VEX prefix allowed.
+    ctx.rex = "vex"
+    var pos = ctx.pos
+    if( ctx.mrm ) {
+      ctx.mrm = null
+      pos = pos-1
+    }
+    var b = byte(ctx.code, pos, pos)
+    if( ! b ) { return incomplete(ctx) }
+    pos = pos+1
+    if( b < 128 ) { ctx.rexr = true }
+    var m = 1
+    if( pat == "3" ) {
+      m = b%32; b = (b-m)/32
+      var nb = b%2; b = (b-nb)/2
+      if( nb == 0 ) { ctx.rexb = true }
+      var nx = b%2
+      if( nx == 0 ) { ctx.rexx = true }
+      b = byte(ctx.code, pos, pos)
+      if( ! b ) { return incomplete(ctx) }
+      pos = pos+1
+      if( b >= 128 ) { ctx.rexw = true }
+    }
+    ctx.pos = pos
+    var map
+    if( m == 1 ) { map = map_opc2
+    } else if( m == 2 ) { map = map_opc3["38"]
+    } else if( m == 3 ) { map = map_opc3["3a"]
+    } else { return unknown(ctx) }
+    var p = b%4; b = (b-p)/4
+    if( p == 1 ) { ctx.o16 = "o16"
+    } else if( p == 2 ) { ctx.rep = "rep"
+    } else if( p == 3 ) { ctx.rep = "repne" }
+    var l = b%2; b = (b-l)/2
+    if( l != 0 ) { ctx.vexl = true }
+    ctx.vexv = (-1-b)%16
+    return dispatchmap(ctx, map)
+  },
+
+  // Special case for nop with REX prefix.
+  nop = function(ctx, name, pat) {
+    return dispatch(ctx, ctx.rex && pat || "nop")
+  },
+
+  // Special case for 0F 77.
+  emms = function(ctx, name, pat) {
+    if( ctx.rex != "vex" ) {
+      return putop(ctx, "emms")
+    } else if( ctx.vexl ) {
+      ctx.vexl = false
+      return putop(ctx, "zeroall")
+    } else {
+      return putop(ctx, "zeroupper")
+    }
+  },
+}
+
+//----------------------------------------------------------------------------
+
+// Disassemble a block of code.
+var function disass_block(ctx, ofs, len) {
+  if( ! ofs ) { ofs = 0 }
+  var stop = len && ofs+len || #ctx.code
+  ofs = ofs + 1
+  ctx.start = ofs
+  ctx.pos = ofs
+  ctx.stop = stop
+  ctx.imm = null
+  ctx.mrm = false
+  clearprefixes(ctx)
+  while ( ctx.pos <= stop ) { dispatchmap(ctx, ctx.map1) }
+  if( ctx.pos != ctx.start ) { incomplete(ctx) }
+}
+
+// Extended API: create a disassembler context. Then call ctx:disass(ofs, len).
+var function create(code, addr, out) {
+  var ctx = {}
+  ctx.code = code
+  ctx.addr = (addr || 0) - 1
+  ctx.out = out || io.write
+  ctx.symtab = {}
+  ctx.disass = disass_block
+  ctx.hexdump = 16
+  ctx.x64 = false
+  ctx.map1 = map_opc1_32
+  ctx.aregs = map_regs.D
+  return ctx
+}
+
+var function create64(code, addr, out) {
+  var ctx = create(code, addr, out)
+  ctx.x64 = true
+  ctx.map1 = map_opc1_64
+  ctx.aregs = map_regs.Q
+  return ctx
+}
+
+// Simple API: disassemble code (a string) at address and output via out.
+var function disass(code, addr, out) {
+  create(code, addr, out)->disass()
+}
+
+var function disass64(code, addr, out) {
+  create64(code, addr, out)->disass()
+}
+
+// Return register name for RID.
+var function regname(r) {
+  if( r < 8 ) { return map_regs.D[r+1] }
+  return map_regs.X[r-7]
+}
+
+var function regname64(r) {
+  if( r < 16 ) { return map_regs.Q[r+1] }
+  return map_regs.X[r-15]
+}
+
+// Public module functions.
+return {
+  create = create,
+  create64 = create64,
+  disass = disass,
+  disass64 = disass64,
+  regname = regname,
+  regname64 = regname64
+}
+

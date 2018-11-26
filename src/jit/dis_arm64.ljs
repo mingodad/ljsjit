@@ -1,0 +1,1216 @@
+//--------------------------------------------------------------------------
+// LuaJIT ARM64 disassembler module.
+//
+// Copyright (C) 2005-2017 Mike Pall. All rights reserved.
+// Released under the MIT license. See Copyright Notice in luajit.h
+//
+// Contributed by Djordje Kovacevic and Stefan Pejic from RT-RK.com.
+// Sponsored by Cisco Systems, Inc.
+//--------------------------------------------------------------------------
+// This is a helper module used by the LuaJIT machine code dumper module.
+//
+// It disassembles most user-mode AArch64 instructions.
+// NYI: Advanced SIMD and VFP instructions.
+//----------------------------------------------------------------------------
+
+var type = type
+var sub, byte, format = string.sub, string.byte, string.format
+var match, gmatch, gsub = string.match, string.gmatch, string.gsub
+var concat = table.concat
+var bit = require("bit")
+var band, bor, bxor, tohex = bit.band, bit.bor, bit.bxor, bit.tohex
+var lshift, rshift, arshift = bit.lshift, bit.rshift, bit.arshift
+var ror = bit.ror
+
+//----------------------------------------------------------------------------
+// Opcode maps
+//----------------------------------------------------------------------------
+
+var map_adr = { // PC-relative addressing.
+  shift = 31, mask = 1,
+  [0] = "adrDBx", "adrpDBx"
+}
+
+var map_addsubi = { // Add/subtract immediate.
+  shift = 29, mask = 3,
+  [0] = "add|movDNIg", "adds|cmnD0NIg", "subDNIg", "subs|cmpD0NIg",
+}
+
+var map_logi = { // Logical immediate.
+  shift = 31, mask = 1,
+  [0] = {
+    shift = 22, mask = 1,
+    [0] = {
+      shift = 29, mask = 3,
+      [0] = "andDNig", "orr|movDN0ig", "eorDNig", "ands|tstD0Nig"
+    },
+    false // unallocated
+  },
+  {
+    shift = 29, mask = 3,
+    [0] = "andDNig", "orr|movDN0ig", "eorDNig", "ands|tstD0Nig"
+  }
+}
+
+var map_movwi = { // Move wide immediate.
+  shift = 31, mask = 1,
+  [0] = {
+    shift = 22, mask = 1,
+    [0] = {
+      shift = 29, mask = 3,
+      [0] = "movnDWRg", false, "movz|movDYRg", "movkDWRg"
+    }, false // unallocated
+  },
+  {
+    shift = 29, mask = 3,
+    [0] = "movnDWRg", false, "movz|movDYRg", "movkDWRg"
+  },
+}
+
+var map_bitf = { // Bitfield.
+  shift = 31, mask = 1,
+  [0] = {
+    shift = 22, mask = 1,
+    [0] = {
+      shift = 29, mask = 3,
+      [0] = "sbfm|sbfiz|sbfx|asr|sxtw|sxth|sxtbDN12w",
+      "bfm|bfi|bfxilDN13w",
+      "ubfm|ubfiz|ubfx|lsr|lsl|uxth|uxtbDN12w"
+    }
+  },
+  {
+    shift = 22, mask = 1,
+    {
+      shift = 29, mask = 3,
+      [0] = "sbfm|sbfiz|sbfx|asr|sxtw|sxth|sxtbDN12x",
+      "bfm|bfi|bfxilDN13x",
+      "ubfm|ubfiz|ubfx|lsr|lsl|uxth|uxtbDN12x"
+    }
+  }
+}
+
+var map_datai = { // Data processing - immediate.
+  shift = 23, mask = 7,
+  [0] = map_adr, map_adr, map_addsubi, false,
+  map_logi, map_movwi, map_bitf,
+  {
+    shift = 15, mask = 0x1c0c1,
+    [0] = "extr|rorDNM4w", [0x10080] = "extr|rorDNM4x",
+    [0x10081] = "extr|rorDNM4x"
+  }
+}
+
+var map_logsr = { // Logical, shifted register.
+  shift = 31, mask = 1,
+  [0] = {
+    shift = 15, mask = 1,
+    [0] = {
+      shift = 29, mask = 3,
+      [0] = {
+	shift = 21, mask = 7,
+	[0] = "andDNMSg", "bicDNMSg", "andDNMSg", "bicDNMSg",
+	"andDNMSg", "bicDNMSg", "andDNMg", "bicDNMg"
+      },
+      {
+	shift = 21, mask = 7,
+	[0] ="orr|movDN0MSg", "orn|mvnDN0MSg", "orr|movDN0MSg", "orn|mvnDN0MSg",
+	     "orr|movDN0MSg", "orn|mvnDN0MSg", "orr|movDN0Mg", "orn|mvnDN0Mg"
+      },
+      {
+	shift = 21, mask = 7,
+	[0] = "eorDNMSg", "eonDNMSg", "eorDNMSg", "eonDNMSg",
+	"eorDNMSg", "eonDNMSg", "eorDNMg", "eonDNMg"
+      },
+      {
+	shift = 21, mask = 7,
+	[0] = "ands|tstD0NMSg", "bicsDNMSg", "ands|tstD0NMSg", "bicsDNMSg",
+	"ands|tstD0NMSg", "bicsDNMSg", "ands|tstD0NMg", "bicsDNMg"
+      }
+    },
+    false // unallocated
+  },
+  {
+    shift = 29, mask = 3,
+    [0] = {
+      shift = 21, mask = 7,
+      [0] = "andDNMSg", "bicDNMSg", "andDNMSg", "bicDNMSg",
+      "andDNMSg", "bicDNMSg", "andDNMg", "bicDNMg"
+    },
+    {
+      shift = 21, mask = 7,
+      [0] = "orr|movDN0MSg", "orn|mvnDN0MSg", "orr|movDN0MSg", "orn|mvnDN0MSg",
+      "orr|movDN0MSg", "orn|mvnDN0MSg", "orr|movDN0Mg", "orn|mvnDN0Mg"
+    },
+    {
+      shift = 21, mask = 7,
+      [0] = "eorDNMSg", "eonDNMSg", "eorDNMSg", "eonDNMSg",
+      "eorDNMSg", "eonDNMSg", "eorDNMg", "eonDNMg"
+    },
+    {
+      shift = 21, mask = 7,
+      [0] = "ands|tstD0NMSg", "bicsDNMSg", "ands|tstD0NMSg", "bicsDNMSg",
+      "ands|tstD0NMSg", "bicsDNMSg", "ands|tstD0NMg", "bicsDNMg"
+    }
+  }
+}
+
+var map_assh = {
+  shift = 31, mask = 1,
+  [0] = {
+    shift = 15, mask = 1,
+    [0] = {
+      shift = 29, mask = 3,
+      [0] = {
+	shift = 22, mask = 3,
+	[0] = "addDNMSg", "addDNMSg", "addDNMSg", "addDNMg"
+      },
+      {
+	shift = 22, mask = 3,
+	[0] = "adds|cmnD0NMSg", "adds|cmnD0NMSg",
+	      "adds|cmnD0NMSg", "adds|cmnD0NMg"
+      },
+      {
+	shift = 22, mask = 3,
+	[0] = "sub|negDN0MSg", "sub|negDN0MSg", "sub|negDN0MSg", "sub|negDN0Mg"
+      },
+      {
+	shift = 22, mask = 3,
+	[0] = "subs|cmp|negsD0N0MzSg", "subs|cmp|negsD0N0MzSg",
+	      "subs|cmp|negsD0N0MzSg", "subs|cmp|negsD0N0Mzg"
+      },
+    },
+    false // unallocated
+  },
+  {
+    shift = 29, mask = 3,
+    [0] = {
+      shift = 22, mask = 3,
+      [0] = "addDNMSg", "addDNMSg", "addDNMSg", "addDNMg"
+    },
+    {
+      shift = 22, mask = 3,
+      [0] = "adds|cmnD0NMSg", "adds|cmnD0NMSg", "adds|cmnD0NMSg",
+	    "adds|cmnD0NMg"
+    },
+    {
+      shift = 22, mask = 3,
+      [0] = "sub|negDN0MSg", "sub|negDN0MSg", "sub|negDN0MSg", "sub|negDN0Mg"
+    },
+    {
+      shift = 22, mask = 3,
+      [0] = "subs|cmp|negsD0N0MzSg", "subs|cmp|negsD0N0MzSg",
+	    "subs|cmp|negsD0N0MzSg", "subs|cmp|negsD0N0Mzg"
+    }
+  }
+}
+
+var map_addsubsh = { // Add/subtract, shifted register.
+  shift = 22, mask = 3,
+  [0] = map_assh, map_assh, map_assh
+}
+
+var map_addsubex = { // Add/subtract, extended register.
+  shift = 22, mask = 3,
+  [0] = {
+    shift = 29, mask = 3,
+    [0] = "addDNMXg", "adds|cmnD0NMXg", "subDNMXg", "subs|cmpD0NMzXg",
+  }
+}
+
+var map_addsubc = { // Add/subtract, with carry.
+  shift = 10, mask = 63,
+  [0] = {
+    shift = 29, mask = 3,
+    [0] = "adcDNMg", "adcsDNMg", "sbc|ngcDN0Mg", "sbcs|ngcsDN0Mg",
+  }
+}
+
+var map_ccomp = {
+  shift = 4, mask = 1,
+  [0] = {
+    shift = 10, mask = 3,
+    [0] = { // Conditional compare register.
+      shift = 29, mask = 3,
+      "ccmnNMVCg", false, "ccmpNMVCg",
+    },
+    [2] = {  // Conditional compare immediate.
+      shift = 29, mask = 3,
+      "ccmnN5VCg", false, "ccmpN5VCg",
+    }
+  }
+}
+
+var map_csel = { // Conditional select.
+  shift = 11, mask = 1,
+  [0] = {
+    shift = 10, mask = 1,
+    [0] = {
+      shift = 29, mask = 3,
+      [0] = "cselDNMzCg", false, "csinv|cinv|csetmDNMcg", false,
+    },
+    {
+      shift = 29, mask = 3,
+      [0] = "csinc|cinc|csetDNMcg", false, "csneg|cnegDNMcg", false,
+    }
+  }
+}
+
+var map_data1s = { // Data processing, 1 source.
+  shift = 29, mask = 1,
+  [0] = {
+    shift = 31, mask = 1,
+    [0] = {
+      shift = 10, mask = 0x7ff,
+      [0] = "rbitDNg", "rev16DNg", "revDNw", false, "clzDNg", "clsDNg"
+    },
+    {
+      shift = 10, mask = 0x7ff,
+      [0] = "rbitDNg", "rev16DNg", "rev32DNx", "revDNx", "clzDNg", "clsDNg"
+    }
+  }
+}
+
+var map_data2s = { // Data processing, 2 sources.
+  shift = 29, mask = 1,
+  [0] = {
+    shift = 10, mask = 63,
+    false, "udivDNMg", "sdivDNMg", false, false, false, false, "lslDNMg",
+    "lsrDNMg", "asrDNMg", "rorDNMg"
+  }
+}
+
+var map_data3s = { // Data processing, 3 sources.
+  shift = 29, mask = 7,
+  [0] = {
+    shift = 21, mask = 7,
+    [0] = {
+      shift = 15, mask = 1,
+      [0] = "madd|mulDNMA0g", "msub|mnegDNMA0g"
+    }
+  }, false, false, false,
+  {
+    shift = 15, mask = 1,
+    [0] = {
+      shift = 21, mask = 7,
+      [0] = "madd|mulDNMA0g", "smaddl|smullDxNMwA0x", "smulhDNMx", false,
+      false, "umaddl|umullDxNMwA0x", "umulhDNMx"
+    },
+    {
+      shift = 21, mask = 7,
+      [0] = "msub|mnegDNMA0g", "smsubl|smneglDxNMwA0x", false, false,
+      false, "umsubl|umneglDxNMwA0x"
+    }
+  }
+}
+
+var map_datar = { // Data processing, register.
+  shift = 28, mask = 1,
+  [0] = {
+    shift = 24, mask = 1,
+    [0] = map_logsr,
+    {
+      shift = 21, mask = 1,
+      [0] = map_addsubsh, map_addsubex
+    }
+  },
+  {
+    shift = 21, mask = 15,
+    [0] = map_addsubc, false, map_ccomp, false, map_csel, false,
+    {
+      shift = 30, mask = 1,
+      [0] = map_data2s, map_data1s
+    },
+    false, map_data3s, map_data3s, map_data3s, map_data3s, map_data3s,
+    map_data3s, map_data3s, map_data3s
+  }
+}
+
+var map_lrl = { // Load register, literal.
+  shift = 26, mask = 1,
+  [0] = {
+    shift = 30, mask = 3,
+    [0] = "ldrDwB", "ldrDxB", "ldrswDxB"
+  },
+  {
+    shift = 30, mask = 3,
+    [0] = "ldrDsB", "ldrDdB"
+  }
+}
+
+var map_lsriind = { // Load/store register, immediate pre/post-indexed.
+  shift = 30, mask = 3,
+  [0] = {
+    shift = 26, mask = 1,
+    [0] = {
+      shift = 22, mask = 3,
+      [0] = "strbDwzL", "ldrbDwzL", "ldrsbDxzL", "ldrsbDwzL"
+    }
+  },
+  {
+    shift = 26, mask = 1,
+    [0] = {
+      shift = 22, mask = 3,
+      [0] = "strhDwzL", "ldrhDwzL", "ldrshDxzL", "ldrshDwzL"
+    }
+  },
+  {
+    shift = 26, mask = 1,
+    [0] = {
+      shift = 22, mask = 3,
+      [0] = "strDwzL", "ldrDwzL", "ldrswDxzL"
+    },
+    {
+      shift = 22, mask = 3,
+      [0] = "strDszL", "ldrDszL"
+    }
+  },
+  {
+    shift = 26, mask = 1,
+    [0] = {
+      shift = 22, mask = 3,
+      [0] = "strDxzL", "ldrDxzL"
+    },
+    {
+      shift = 22, mask = 3,
+      [0] = "strDdzL", "ldrDdzL"
+    }
+  }
+}
+
+var map_lsriro = {
+  shift = 21, mask = 1,
+  [0] = {  // Load/store register immediate.
+    shift = 10, mask = 3,
+    [0] = { // Unscaled immediate.
+      shift = 26, mask = 1,
+      [0] = {
+	shift = 30, mask = 3,
+	[0] = {
+	  shift = 22, mask = 3,
+	  [0] = "sturbDwK", "ldurbDwK"
+	},
+	{
+	  shift = 22, mask = 3,
+	  [0] = "sturhDwK", "ldurhDwK"
+	},
+	{
+	  shift = 22, mask = 3,
+	  [0] = "sturDwK", "ldurDwK"
+	},
+	{
+	  shift = 22, mask = 3,
+	  [0] = "sturDxK", "ldurDxK"
+	}
+      }
+    }, map_lsriind, false, map_lsriind
+  },
+  {  // Load/store register, register offset.
+    shift = 10, mask = 3,
+    [2] = {
+      shift = 26, mask = 1,
+      [0] = {
+	shift = 30, mask = 3,
+	[0] = {
+	  shift = 22, mask = 3,
+	  [0] = "strbDwO", "ldrbDwO", "ldrsbDxO", "ldrsbDwO"
+	},
+	{
+	  shift = 22, mask = 3,
+	  [0] = "strhDwO", "ldrhDwO", "ldrshDxO", "ldrshDwO"
+	},
+	{
+	  shift = 22, mask = 3,
+	  [0] = "strDwO", "ldrDwO", "ldrswDxO"
+	},
+	{
+	  shift = 22, mask = 3,
+	  [0] = "strDxO", "ldrDxO"
+	}
+      },
+      {
+	shift = 30, mask = 3,
+	[2] = {
+	  shift = 22, mask = 3,
+	  [0] = "strDsO", "ldrDsO"
+	},
+	[3] = {
+	  shift = 22, mask = 3,
+	  [0] = "strDdO", "ldrDdO"
+	}
+      }
+    }
+  }
+}
+
+var map_lsp = { // Load/store register pair, offset.
+  shift = 22, mask = 1,
+  [0] = {
+    shift = 30, mask = 3,
+    [0] = {
+      shift = 26, mask = 1,
+      [0] = "stpDzAzwP", "stpDzAzsP",
+    },
+    {
+      shift = 26, mask = 1,
+      "stpDzAzdP"
+    },
+    {
+      shift = 26, mask = 1,
+      [0] = "stpDzAzxP"
+    }
+  },
+  {
+    shift = 30, mask = 3,
+    [0] = {
+      shift = 26, mask = 1,
+      [0] = "ldpDzAzwP", "ldpDzAzsP",
+    },
+    {
+      shift = 26, mask = 1,
+      [0] = "ldpswDAxP", "ldpDzAzdP"
+    },
+    {
+      shift = 26, mask = 1,
+      [0] = "ldpDzAzxP"
+    }
+  }
+}
+
+var map_ls = { // Loads and stores.
+  shift = 24, mask = 0x31,
+  [0x10] = map_lrl, [0x30] = map_lsriro,
+  [0x20] = {
+    shift = 23, mask = 3,
+    map_lsp, map_lsp, map_lsp
+  },
+  [0x21] = {
+    shift = 23, mask = 3,
+    map_lsp, map_lsp, map_lsp
+  },
+  [0x31] = {
+    shift = 26, mask = 1,
+    [0] = {
+      shift = 30, mask = 3,
+      [0] = {
+	shift = 22, mask = 3,
+	[0] = "strbDwzU", "ldrbDwzU"
+      },
+      {
+	shift = 22, mask = 3,
+	[0] = "strhDwzU", "ldrhDwzU"
+      },
+      {
+	shift = 22, mask = 3,
+	[0] = "strDwzU", "ldrDwzU"
+      },
+      {
+	shift = 22, mask = 3,
+	[0] = "strDxzU", "ldrDxzU"
+      }
+    },
+    {
+      shift = 30, mask = 3,
+      [2] = {
+	shift = 22, mask = 3,
+	[0] = "strDszU", "ldrDszU"
+      },
+      [3] = {
+	shift = 22, mask = 3,
+	[0] = "strDdzU", "ldrDdzU"
+      }
+    }
+  },
+}
+
+var map_datafp = { // Data processing, SIMD and FP.
+  shift = 28, mask = 7,
+  { // 001
+    shift = 24, mask = 1,
+    [0] = {
+      shift = 21, mask = 1,
+      {
+	shift = 10, mask = 3,
+	[0] = {
+	  shift = 12, mask = 1,
+	  [0] = {
+	    shift = 13, mask = 1,
+	    [0] = {
+	      shift = 14, mask = 1,
+	      [0] = {
+		shift = 15, mask = 1,
+		[0] = { // FP/int conversion.
+		  shift = 31, mask = 1,
+		  [0] = {
+		    shift = 16, mask = 0xff,
+		    [0x20] = "fcvtnsDwNs", [0x21] = "fcvtnuDwNs",
+		    [0x22] = "scvtfDsNw", [0x23] = "ucvtfDsNw",
+		    [0x24] = "fcvtasDwNs", [0x25] = "fcvtauDwNs",
+		    [0x26] = "fmovDwNs", [0x27] = "fmovDsNw",
+		    [0x28] = "fcvtpsDwNs", [0x29] = "fcvtpuDwNs",
+		    [0x30] = "fcvtmsDwNs", [0x31] = "fcvtmuDwNs",
+		    [0x38] = "fcvtzsDwNs", [0x39] = "fcvtzuDwNs",
+		    [0x60] = "fcvtnsDwNd", [0x61] = "fcvtnuDwNd",
+		    [0x62] = "scvtfDdNw", [0x63] = "ucvtfDdNw",
+		    [0x64] = "fcvtasDwNd", [0x65] = "fcvtauDwNd",
+		    [0x68] = "fcvtpsDwNd", [0x69] = "fcvtpuDwNd",
+		    [0x70] = "fcvtmsDwNd", [0x71] = "fcvtmuDwNd",
+		    [0x78] = "fcvtzsDwNd", [0x79] = "fcvtzuDwNd"
+		  },
+		  {
+		    shift = 16, mask = 0xff,
+		    [0x20] = "fcvtnsDxNs", [0x21] = "fcvtnuDxNs",
+		    [0x22] = "scvtfDsNx", [0x23] = "ucvtfDsNx",
+		    [0x24] = "fcvtasDxNs", [0x25] = "fcvtauDxNs",
+		    [0x28] = "fcvtpsDxNs", [0x29] = "fcvtpuDxNs",
+		    [0x30] = "fcvtmsDxNs", [0x31] = "fcvtmuDxNs",
+		    [0x38] = "fcvtzsDxNs", [0x39] = "fcvtzuDxNs",
+		    [0x60] = "fcvtnsDxNd", [0x61] = "fcvtnuDxNd",
+		    [0x62] = "scvtfDdNx", [0x63] = "ucvtfDdNx",
+		    [0x64] = "fcvtasDxNd", [0x65] = "fcvtauDxNd",
+		    [0x66] = "fmovDxNd", [0x67] = "fmovDdNx",
+		    [0x68] = "fcvtpsDxNd", [0x69] = "fcvtpuDxNd",
+		    [0x70] = "fcvtmsDxNd", [0x71] = "fcvtmuDxNd",
+		    [0x78] = "fcvtzsDxNd", [0x79] = "fcvtzuDxNd"
+		  }
+		}
+	      },
+	      { // FP data-processing, 1 source.
+		shift = 31, mask = 1,
+		[0] = {
+		  shift = 22, mask = 3,
+		  [0] = {
+		    shift = 15, mask = 63,
+		    [0] = "fmovDNf", "fabsDNf", "fnegDNf",
+		    "fsqrtDNf", false, "fcvtDdNs", false, false,
+		    "frintnDNf", "frintpDNf", "frintmDNf", "frintzDNf",
+		    "frintaDNf", false, "frintxDNf", "frintiDNf",
+		  },
+		  {
+		    shift = 15, mask = 63,
+		    [0] = "fmovDNf", "fabsDNf", "fnegDNf",
+		    "fsqrtDNf", "fcvtDsNd", false, false, false,
+		    "frintnDNf", "frintpDNf", "frintmDNf", "frintzDNf",
+		    "frintaDNf", false, "frintxDNf", "frintiDNf",
+		  }
+		}
+	      }
+	    },
+	    { // FP compare.
+	      shift = 31, mask = 1,
+	      [0] = {
+		shift = 14, mask = 3,
+		[0] = {
+		  shift = 23, mask = 1,
+		  [0] = {
+		    shift = 0, mask = 31,
+		    [0] = "fcmpNMf", [8] = "fcmpNZf",
+		    [16] = "fcmpeNMf", [24] = "fcmpeNZf",
+		  }
+		}
+	      }
+	    }
+	  },
+	  { // FP immediate.
+	    shift = 31, mask = 1,
+	    [0] = {
+	      shift = 5, mask = 31,
+	      [0] = {
+		shift = 23, mask = 1,
+		[0] = "fmovDFf"
+	      }
+	    }
+	  }
+	},
+	{ // FP conditional compare.
+	  shift = 31, mask = 1,
+	  [0] = {
+	    shift = 23, mask = 1,
+	    [0] = {
+	      shift = 4, mask = 1,
+	      [0] = "fccmpNMVCf", "fccmpeNMVCf"
+	    }
+	  }
+	},
+	{ // FP data-processing, 2 sources.
+	  shift = 31, mask = 1,
+	  [0] = {
+	    shift = 23, mask = 1,
+	    [0] = {
+	      shift = 12, mask = 15,
+	      [0] = "fmulDNMf", "fdivDNMf", "faddDNMf", "fsubDNMf",
+	      "fmaxDNMf", "fminDNMf", "fmaxnmDNMf", "fminnmDNMf",
+	      "fnmulDNMf"
+	    }
+	  }
+	},
+	{ // FP conditional select.
+	  shift = 31, mask = 1,
+	  [0] = {
+	    shift = 23, mask = 1,
+	    [0] = "fcselDNMCf"
+	  }
+	}
+      }
+    },
+    { // FP data-processing, 3 sources.
+      shift = 31, mask = 1,
+      [0] = {
+	shift = 15, mask = 1,
+	[0] = {
+	  shift = 21, mask = 5,
+	  [0] = "fmaddDNMAf", "fnmaddDNMAf"
+	},
+	{
+	  shift = 21, mask = 5,
+	  [0] = "fmsubDNMAf", "fnmsubDNMAf"
+	}
+      }
+    }
+  }
+}
+
+var map_br = { // Branches, exception generating and system instructions.
+  shift = 29, mask = 7,
+  [0] = "bB",
+  { // Compare & branch, immediate.
+    shift = 24, mask = 3,
+    [0] = "cbzDBg", "cbnzDBg", "tbzDTBw", "tbnzDTBw"
+  },
+  { // Conditional branch, immediate.
+    shift = 24, mask = 3,
+    [0] = {
+      shift = 4, mask = 1,
+      [0] = {
+	shift = 0, mask = 15,
+	[0] = "beqB", "bneB", "bhsB", "bloB", "bmiB", "bplB", "bvsB", "bvcB",
+	"bhiB", "blsB", "bgeB", "bltB", "bgtB", "bleB", "balB"
+      }
+    }
+  }, false, "blB",
+  { // Compare & branch, immediate.
+    shift = 24, mask = 3,
+    [0] = "cbzDBg", "cbnzDBg", "tbzDTBx", "tbnzDTBx"
+  },
+  {
+    shift = 24, mask = 3,
+    [0] = { // Exception generation.
+      shift = 0, mask = 0xe0001f,
+      [0x200000] = "brkW"
+    },
+    { // System instructions.
+      shift = 0, mask = 0x3fffff,
+      [0x03201f] = "nop"
+    },
+    { // Unconditional branch, register.
+      shift = 0, mask = 0xfffc1f,
+      [0x1f0000] = "brNx", [0x3f0000] = "blrNx",
+      [0x5f0000] = "retNx"
+    },
+  }
+}
+
+var map_init = {
+  shift = 25, mask = 15,
+  [0] = false, false, false, false, map_ls, map_datar, map_ls, map_datafp,
+  map_datai, map_datai, map_br, map_br, map_ls, map_datar, map_ls, map_datafp
+}
+
+//----------------------------------------------------------------------------
+
+var map_regs = { x = {}, w = {}, d = {}, s = {} }
+
+for( i=0,30 ) {
+  map_regs.x[i] = "x"..i
+  map_regs.w[i] = "w"..i
+  map_regs.d[i] = "d"..i
+  map_regs.s[i] = "s"..i
+}
+map_regs.x[31] = "sp"
+map_regs.w[31] = "wsp"
+map_regs.d[31] = "d31"
+map_regs.s[31] = "s31"
+
+var map_cond = {
+  [0] = "eq", "ne", "cs", "cc", "mi", "pl", "vs", "vc",
+  "hi", "ls", "ge", "lt", "gt", "le", "al",
+}
+
+var map_shift = { [0] = "lsl", "lsr", "asr", }
+
+var map_extend = {
+  [0] = "uxtb", "uxth", "uxtw", "uxtx", "sxtb", "sxth", "sxtw", "sxtx",
+}
+
+//----------------------------------------------------------------------------
+
+// Output a nicely formatted line with an opcode and operands.
+var function putop(ctx, text, operands) {
+  var pos = ctx.pos
+  var extra = ""
+  if( ctx.rel ) {
+    var sym = ctx.symtab[ctx.rel]
+    if( sym ) {
+      extra = "\t->"..sym
+    }
+  }
+  if( ctx.hexdump > 0 ) {
+    ctx.out(format("%08x  %s  %-5s %s%s\n",
+      ctx.addr+pos, tohex(ctx.op), text, concat(operands, ", "), extra))
+  } else {
+    ctx.out(format("%08x  %-5s %s%s\n",
+      ctx.addr+pos, text, concat(operands, ", "), extra))
+  }
+  ctx.pos = pos + 4
+}
+
+// Fallback for unknown opcodes.
+var function unknown(ctx) {
+  return putop(ctx, ".long", { "0x"..tohex(ctx.op) })
+}
+
+var function match_reg(p, pat, regnum) {
+  return map_regs[match(pat, p.."%w-([xwds])")][regnum]
+}
+
+var function fmt_hex32(x) {
+  if( x < 0 ) {
+    return tohex(x)
+  } else {
+    return format("%x", x)
+  }
+}
+
+var imm13_rep = { 0x55555555, 0x11111111, 0x01010101, 0x00010001, 0x00000001 }
+
+var function decode_imm13(op) {
+  var imms = band(rshift(op, 10), 63)
+  var immr = band(rshift(op, 16), 63)
+  if( band(op, 0x00400000) == 0 ) {
+    var len = 5
+    if( imms >= 56 ) {
+      if( imms >= 60 ) { len = 1 } else { len = 2 }
+    } else if( imms >= 48 ) { len = 3 } else if( imms >= 32 ) { len = 4 }
+    var l = lshift(1, len)-1
+    var s = band(imms, l)
+    var r = band(immr, l)
+    var imm = ror(rshift(-1, 31-s), r)
+    if( len != 5 ) { imm = band(imm, lshift(1, l)-1) + rshift(imm, 31-l) }
+    imm = imm * imm13_rep[len]
+    var ix = fmt_hex32(imm)
+    if( rshift(op, 31) != 0 ) {
+      return ix..tohex(imm)
+    } else {
+      return ix
+    }
+  } else {
+    var lo, hi = -1, 0
+    if( imms < 32 ) { lo = rshift(-1, 31-imms) } else { hi = rshift(-1, 63-imms) }
+    if( immr != 0 ) {
+      lo, hi = ror(lo, immr), ror(hi, immr)
+      var x = immr == 32 && 0 || band(bxor(lo, hi), lshift(-1, 32-immr))
+      lo, hi = bxor(lo, x), bxor(hi, x)
+      if( immr >= 32 ) { lo, hi = hi, lo }
+    }
+    if( hi != 0 ) {
+      return fmt_hex32(hi)..tohex(lo)
+    } else {
+      return fmt_hex32(lo)
+    }
+  }
+}
+
+var function parse_immpc(op, name) {
+  if( name == "b" || name == "bl" ) {
+    return arshift(lshift(op, 6), 4)
+  } else if( name == "adr" || name == "adrp" ) {
+    var immlo = band(rshift(op, 29), 3)
+    var immhi = lshift(arshift(lshift(op, 8), 13), 2)
+    return bor(immhi, immlo)
+  } else if( name == "tbz" || name == "tbnz" ) {
+    return lshift(arshift(lshift(op, 13), 18), 2)
+  } else {
+    return lshift(arshift(lshift(op, 8), 13), 2)
+  }
+}
+
+var function parse_fpimm8(op) {
+  var sign = band(op, 0x100000) == 0 && 1 || -1
+  var exp = bxor(rshift(arshift(lshift(op, 12), 5), 24), 0x80) - 131
+  var frac = 16+band(rshift(op, 13), 15)
+  return sign * frac * 2**exp
+}
+
+var function prefer_bfx(sf, uns, imms, immr) {
+  if( imms < immr || imms == 31 || imms == 63 ) {
+    return false
+  }
+  if( immr == 0 ) {
+    if( sf == 0 && (imms == 7 || imms == 15) ) {
+      return false
+    }
+    if( sf != 0 && uns == 0 && (imms == 7 || imms == 15 || imms == 31) ) {
+      return false
+    }
+  }
+  return true
+}
+
+// Disassemble a single instruction.
+var function disass_ins(ctx) {
+  var pos = ctx.pos
+  var b0, b1, b2, b3 = byte(ctx.code, pos+1, pos+4)
+  var op = bor(lshift(b3, 24), lshift(b2, 16), lshift(b1, 8), b0)
+  var operands = {}
+  var suffix = ""
+  var last, name, pat
+  var map_reg
+  ctx.op = op
+  ctx.rel = null
+  last = null
+  var opat
+  opat = map_init[band(rshift(op, 25), 15)]
+  while ( type(opat) != "string" ) {
+    if( ! opat ) { return unknown(ctx) }
+    opat = opat[band(rshift(op, opat.shift), opat.mask)] || opat._
+  }
+  name, pat = match(opat, "^([a-z0-9]*)(.*)")
+  var altname, pat2 = match(pat, "|([a-z0-9_.|]*)(.*)")
+  if( altname ) { pat = pat2 }
+  if( sub(pat, 1, 1) == "." ) {
+    var s2, p2 = match(pat, "^([a-z0-9.]*)(.*)")
+    suffix = suffix..s2
+    pat = p2
+  }
+
+  var rt = match(pat, "[gf]")
+  if( rt ) {
+    if( rt == "g" ) {
+      map_reg = band(op, 0x80000000) != 0 && map_regs.x || map_regs.w
+    } else {
+      map_reg = band(op, 0x400000) != 0 && map_regs.d || map_regs.s
+    }
+  }
+
+  var second0, immr
+
+  for( p in gmatch(pat, ".") ) {
+    var x = null
+    if( p == "D" ) {
+      var regnum = band(op, 31)
+      x = rt && map_reg[regnum] || match_reg(p, pat, regnum)
+    } else if( p == "N" ) {
+      var regnum = band(rshift(op, 5), 31)
+      x = rt && map_reg[regnum] || match_reg(p, pat, regnum)
+    } else if( p == "M" ) {
+      var regnum = band(rshift(op, 16), 31)
+      x = rt && map_reg[regnum] || match_reg(p, pat, regnum)
+    } else if( p == "A" ) {
+      var regnum = band(rshift(op, 10), 31)
+      x = rt && map_reg[regnum] || match_reg(p, pat, regnum)
+    } else if( p == "B" ) {
+      var addr = ctx.addr + pos + parse_immpc(op, name)
+      ctx.rel = addr
+      x = "0x"..tohex(addr)
+    } else if( p == "T" ) {
+      x = bor(band(rshift(op, 26), 32), band(rshift(op, 19), 31))
+    } else if( p == "V" ) {
+      x = band(op, 15)
+    } else if( p == "C" ) {
+      x = map_cond[band(rshift(op, 12), 15)]
+    } else if( p == "c" ) {
+      var rn = band(rshift(op, 5), 31)
+      var rm = band(rshift(op, 16), 31)
+      var cond = band(rshift(op, 12), 15)
+      var invc = bxor(cond, 1)
+      x = map_cond[cond]
+      if( altname && cond != 14 && cond != 15 ) {
+	var a1, a2 = match(altname, "([^|]*)|(.*)")
+	if( rn == rm ) {
+	  var n = #operands
+	  operands[n] = null
+	  x = map_cond[invc]
+	  if( rn != 31 ) {
+	    if( a1 ) { name = a1 } else { name = altname }
+	  } else {
+	    operands[n-1] = null
+	    name = a2
+	  }
+	}
+      }
+    } else if( p == "W" ) {
+      x = band(rshift(op, 5), 0xffff)
+    } else if( p == "Y" ) {
+      x = band(rshift(op, 5), 0xffff)
+      var hw = band(rshift(op, 21), 3)
+      if( altname && (hw == 0 || x != 0) ) {
+	name = altname
+      }
+    } else if( p == "L" ) {
+      var rn = map_regs.x[band(rshift(op, 5), 31)]
+      var imm9 = arshift(lshift(op, 11), 23)
+      if( band(op, 0x800) != 0 ) {
+	x = "["..rn..", #"..imm9.."]!"
+      } else {
+	x = "["..rn.."], #"..imm9
+      }
+    } else if( p == "U" ) {
+      var rn = map_regs.x[band(rshift(op, 5), 31)]
+      var sz = band(rshift(op, 30), 3)
+      var imm12 = lshift(arshift(lshift(op, 10), 20), sz)
+      if( imm12 != 0 ) {
+	x = "["..rn..", #"..imm12.."]"
+      } else {
+	x = "["..rn.."]"
+      }
+    } else if( p == "K" ) {
+      var rn = map_regs.x[band(rshift(op, 5), 31)]
+      var imm9 = arshift(lshift(op, 11), 23)
+      if( imm9 != 0 ) {
+	x = "["..rn..", #"..imm9.."]"
+      } else {
+	x = "["..rn.."]"
+      }
+    } else if( p == "O" ) {
+      var rn, rm = map_regs.x[band(rshift(op, 5), 31)]
+      var m = band(rshift(op, 13), 1)
+      if( m == 0 ) {
+	rm = map_regs.w[band(rshift(op, 16), 31)]
+      } else {
+	rm = map_regs.x[band(rshift(op, 16), 31)]
+      }
+      x = "["..rn..", "..rm
+      var opt = band(rshift(op, 13), 7)
+      var s = band(rshift(op, 12), 1)
+      var sz = band(rshift(op, 30), 3)
+      // extension to be applied
+      if( opt == 3 ) {
+       if( s == 0 ) { x = x.."]"
+       } else { x = x..", lsl #"..sz.."]" }
+      } else if( opt == 2 || opt == 6 || opt == 7 ) {
+	if( s == 0 ) { x = x..", "..map_extend[opt].."]"
+	} else { x = x..", "..map_extend[opt].." #"..sz.."]" }
+      } else {
+	x = x.."]"
+      }
+    } else if( p == "P" ) {
+      var opcv, sh = rshift(op, 26), 2
+      if( opcv >= 0x2a ) { sh = 4 } else if( opcv >= 0x1b ) { sh = 3 }
+      var imm7 = lshift(arshift(lshift(op, 10), 25), sh)
+      var rn = map_regs.x[band(rshift(op, 5), 31)]
+      var ind = band(rshift(op, 23), 3)
+      if( ind == 1 ) {
+	x = "["..rn.."], #"..imm7
+      } else if( ind == 2 ) {
+	if( imm7 == 0 ) {
+	  x = "["..rn.."]"
+	} else {
+	  x = "["..rn..", #"..imm7.."]"
+	}
+      } else if( ind == 3 ) {
+	x = "["..rn..", #"..imm7.."]!"
+      }
+    } else if( p == "I" ) {
+      var shf = band(rshift(op, 22), 3)
+      var imm12 = band(rshift(op, 10), 0x0fff)
+      var rn, rd = band(rshift(op, 5), 31), band(op, 31)
+      if( altname == "mov" && shf == 0 && imm12 == 0 && (rn == 31 || rd == 31) ) {
+	name = altname
+	x = null
+      } else if( shf == 0 ) {
+	x = imm12
+      } else if( shf == 1 ) {
+	x = imm12..", lsl #12"
+      }
+    } else if( p == "i" ) {
+      x = "#0x"..decode_imm13(op)
+    } else if( p == "1" ) {
+      immr = band(rshift(op, 16), 63)
+      x = immr
+    } else if( p == "2" ) {
+      x = band(rshift(op, 10), 63)
+      if( altname ) {
+	var a1, a2, a3, a4, a5, a6 =
+	  match(altname, "([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)|(.*)")
+	var sf = band(rshift(op, 26), 32)
+	var uns = band(rshift(op, 30), 1)
+	if( prefer_bfx(sf, uns, x, immr) ) {
+	  name = a2
+	  x = x - immr + 1
+	} else if( immr == 0 && x == 7 ) {
+	  var n = #operands
+	  operands[n] = null
+	  if( sf != 0 ) {
+	    operands[n-1] = gsub(operands[n-1], "x", "w")
+	  }
+	  last = operands[n-1]
+	  name = a6
+	  x = null
+	} else if( immr == 0 && x == 15 ) {
+	  var n = #operands
+	  operands[n] = null
+	  if( sf != 0 ) {
+	    operands[n-1] = gsub(operands[n-1], "x", "w")
+	  }
+	  last = operands[n-1]
+	  name = a5
+	  x = null
+	} else if( x == 31 || x == 63 ) {
+	  if( x == 31 && immr == 0 && name == "sbfm" ) {
+	    name = a4
+	    var n = #operands
+	    operands[n] = null
+	    if( sf != 0 ) {
+	      operands[n-1] = gsub(operands[n-1], "x", "w")
+	    }
+	    last = operands[n-1]
+	  } else {
+	    name = a3
+	  }
+	  x = null
+	} else if( band(x, 31) != 31 && immr == x+1 && name == "ubfm" ) {
+	  name = a4
+	  last = "#"..(sf+32 - immr)
+	  operands[#operands] = last
+	  x = null
+	} else if( x < immr ) {
+	  name = a1
+	  last = "#"..(sf+32 - immr)
+	  operands[#operands] = last
+	  x = x + 1
+	}
+      }
+    } else if( p == "3" ) {
+      x = band(rshift(op, 10), 63)
+      if( altname ) {
+	var a1, a2 = match(altname, "([^|]*)|(.*)")
+	if( x < immr ) {
+	  name = a1
+	  var sf = band(rshift(op, 26), 32)
+	  last = "#"..(sf+32 - immr)
+	  operands[#operands] = last
+	  x = x + 1
+	} else if( x >= immr ) {
+	  name = a2
+	  x = x - immr + 1
+	}
+      }
+    } else if( p == "4" ) {
+      x = band(rshift(op, 10), 63)
+      var rn = band(rshift(op, 5), 31)
+      var rm = band(rshift(op, 16), 31)
+      if( altname && rn == rm ) {
+	var n = #operands
+	operands[n] = null
+	last = operands[n-1]
+	name = altname
+      }
+    } else if( p == "5" ) {
+      x = band(rshift(op, 16), 31)
+    } else if( p == "S" ) {
+      x = band(rshift(op, 10), 63)
+      if( x == 0 ) { x = null
+      } else { x = map_shift[band(rshift(op, 22), 3)].." #"..x }
+    } else if( p == "X" ) {
+      var opt = band(rshift(op, 13), 7)
+      // Width specifier <R>.
+      if( opt != 3 && opt != 7 ) {
+	last = map_regs.w[band(rshift(op, 16), 31)]
+	operands[#operands] = last
+      }
+      x = band(rshift(op, 10), 7)
+      // Extension.
+      if( opt == 2 + band(rshift(op, 31), 1) &&
+	 band(rshift(op, second0 && 5 || 0), 31) == 31 ) {
+	if( x == 0 ) { x = null
+	} else { x = "lsl #"..x }
+      } else {
+	if( x == 0 ) { x = map_extend[band(rshift(op, 13), 7)]
+	} else { x = map_extend[band(rshift(op, 13), 7)].." #"..x }
+      }
+    } else if( p == "R" ) {
+      x = band(rshift(op,21), 3)
+      if( x == 0 ) { x = null
+      } else { x = "lsl #"..x*16 }
+    } else if( p == "z" ) {
+      var n = #operands
+      if( operands[n] == "sp" ) { operands[n] = "xzr"
+      } else if( operands[n] == "wsp" ) { operands[n] = "wzr"
+      }
+    } else if( p == "Z" ) {
+      x = 0
+    } else if( p == "F" ) {
+      x = parse_fpimm8(op)
+    } else if( p == "g" || p == "f" || p == "x" || p == "w" ||
+	   p == "d" || p == "s" ) {
+      // These are handled in D/N/M/A.
+    } else if( p == "0" ) {
+      if( last == "sp" || last == "wsp" ) {
+	var n = #operands
+	operands[n] = null
+	last = operands[n-1]
+	if( altname ) {
+	  var a1, a2 = match(altname, "([^|]*)|(.*)")
+	  if( ! a1 ) {
+	    name = altname
+	  } else if( second0 ) {
+	    name, altname = a2, a1
+	  } else {
+	    name, altname = a1, a2
+	  }
+	}
+      }
+      second0 = true
+    } else {
+      assert(false)
+    }
+    if( x ) {
+      last = x
+      if( type(x) == "number" ) { x = "#"..x }
+      operands[#operands+1] = x
+    }
+  }
+
+  return putop(ctx, name..suffix, operands)
+}
+
+//----------------------------------------------------------------------------
+
+// Disassemble a block of code.
+var function disass_block(ctx, ofs, len) {
+  if( ! ofs ) { ofs = 0 }
+  var stop = len && ofs+len || #ctx.code
+  ctx.pos = ofs
+  ctx.rel = null
+  while ( ctx.pos < stop ) { disass_ins(ctx) }
+}
+
+// Extended API: create a disassembler context. Then call ctx:disass(ofs, len).
+var function create(code, addr, out) {
+  var ctx = {}
+  ctx.code = code
+  ctx.addr = addr || 0
+  ctx.out = out || io.write
+  ctx.symtab = {}
+  ctx.disass = disass_block
+  ctx.hexdump = 8
+  return ctx
+}
+
+// Simple API: disassemble code (a string) at address and output via out.
+var function disass(code, addr, out) {
+  create(code, addr, out)->disass()
+}
+
+// Return register name for RID.
+var function regname(r) {
+  if( r < 32 ) { return map_regs.x[r] }
+  return map_regs.d[r-32]
+}
+
+// Public module functions.
+return {
+  create = create,
+  disass = disass,
+  regname = regname
+}
+
