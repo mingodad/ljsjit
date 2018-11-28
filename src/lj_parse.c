@@ -1036,7 +1036,12 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
 {
   FuncState *fs = ls->fs;
   MSize vtop = ls->vtop;
-  checklimit(fs, fs->nactvar+n, LJ_MAX_LOCVAR, "local variables");
+  BCReg i, nactvar_n = fs->nactvar+n;
+  for (i=fs->bl->nactvar; i < nactvar_n; ++i) {
+    if (name == strref(var_get(ls, fs, i).name))
+      lj_lex_error(ls, 0, LJ_ERR_XNAMEDUP, strdata(name));
+  }
+  checklimit(fs, nactvar_n, LJ_MAX_LOCVAR, "local variables");
   if (LJ_UNLIKELY(vtop >= ls->sizevstack)) {
     if (ls->sizevstack >= LJ_MAX_VSTACK)
       lj_lex_error(ls, 0, LJ_ERR_XLIMC, LJ_MAX_VSTACK);
@@ -1046,7 +1051,7 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
 	     lj_tab_getstr(fs->kt, name) != NULL);
   /* NOBARRIER: name is anchored in fs->kt and ls->vstack is not a GCobj. */
   setgcref(ls->vstack[vtop].name, obj2gco(name));
-  fs->varmap[fs->nactvar+n] = (uint16_t)vtop;
+  fs->varmap[nactvar_n] = (uint16_t)vtop;
   ls->vtop = vtop+1;
 }
 
@@ -1116,14 +1121,14 @@ static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
     if ((int32_t)reg >= 0) {  /* Local in this function? */
       expr_init(e, VLOCAL, reg);
       if (!first)
-	fscope_uvmark(fs, reg);  /* Scope now has an upvalue. */
+        fscope_uvmark(fs, reg);  /* Scope now has an upvalue. */
       return (MSize)(e->u.s.aux = (uint32_t)fs->varmap[reg]);
     } else {
       MSize vidx = var_lookup_(fs->prev, name, e, 0);  /* Var in outer func? */
       if ((int32_t)vidx >= 0) {  /* Yes, make it an upvalue here. */
-	e->u.s.info = (uint8_t)var_lookup_uv(fs, vidx, e);
-	e->k = VUPVAL;
-	return vidx;
+        e->u.s.info = (uint8_t)var_lookup_uv(fs, vidx, e);
+        e->k = VUPVAL;
+        return vidx;
       }
     }
   } else {  /* Not found in any function, must be a global. */
@@ -1731,6 +1736,7 @@ static void expr_table_array(LexState *ls, ExpDesc *e, LexToken openTk, LexToken
   uint32_t nhash = 0;  /* Number of hash entries. */
   BCReg freg = fs->freereg;
   BCPos pc = bcemit_AD(fs, BC_TNEW, freg, 0);
+  LexToken tk_lookahead;
   expr_init(e, VNONRELOC, freg);
   bcreg_reserve(fs, 1);
   freg++;
@@ -1745,7 +1751,7 @@ static void expr_table_array(LexState *ls, ExpDesc *e, LexToken openTk, LexToken
       if (expr_isnumk(&key) && expr_numiszero(&key)) needarr = 1; else nhash++;
       check_key_value_delimiter(ls);
     } else if ((ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) &&
-	       ((lj_lex_lookahead(ls) == '=') || (ls->c == ':'))) {
+	       (((tk_lookahead = lj_lex_lookahead(ls)) == '=') || (tk_lookahead == ':'))) {
       expr_str(ls, &key);
       check_key_value_delimiter(ls);
       nhash++;

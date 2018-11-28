@@ -149,6 +149,7 @@ ERRDEF(XGSCOPE,	"<goto %s> jumps into the scope of local " LUA_QS)
 ERRDEF(XLEFTCOMPOUND,	"syntax error in left hand expression in compound assignment")
 ERRDEF(XRIGHTCOMPOUND,	"syntax error in right hand expression in compound assignment")
 ERRDEF(XKVDELIMIN,	"expect '=' or ':' as key value delimiter")
+ERRDEF(XNAMEDUP,	"duplicate name " LUA_QS)
 
 /* Bytecode reader errors. */
 ERRDEF(BCFMT,	"cannot load incompatible bytecode")
