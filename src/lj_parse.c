@@ -1974,6 +1974,8 @@ static void parse_args(LexState *ls, ExpDesc *e)
   fs->freereg = base+1;  /* Leave one result by default. */
 }
 
+static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost);
+
 /* Parse primary expression. */
 static void expr_primary(LexState *ls, ExpDesc *v)
 {
@@ -2005,6 +2007,12 @@ static void expr_primary(LexState *ls, ExpDesc *v)
     expr_discharge(ls->fs, v);
   } else if (ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) {
     var_lookup(ls, v);
+  } else if (ls->tok == TK_plusplus) {
+    lj_lex_next(ls);
+    inc_dec_op(ls, OPR_ADD, v, 0);
+  } else if (ls->tok == TK_minusminus) {
+    lj_lex_next(ls);
+    inc_dec_op(ls, OPR_SUB, v, 0);
   } else {
     err_syntax(ls, LJ_ERR_XSYMBOL);
   }
@@ -2026,6 +2034,12 @@ static void expr_primary(LexState *ls, ExpDesc *v)
       expr_tonextreg(fs, v);
       if (LJ_FR2) bcreg_reserve(fs, 1);
       parse_args(ls, v);
+    } else if (ls->tok == TK_plusplus) {
+      lj_lex_next(ls);
+      inc_dec_op(ls, OPR_ADD, v, 1);
+    } else if (ls->tok == TK_minusminus) {
+      lj_lex_next(ls);
+      inc_dec_op(ls, OPR_SUB, v, 1);
     } else {
       break;
     }
@@ -2101,6 +2115,11 @@ static void synlevel_begin(LexState *ls)
 static BinOpr token2binop(LexToken tok)
 {
   switch (tok) {
+  /*
+  * if we change the number/order of elments here
+  * we should also change in the priority struct bellow
+  * and on lcode.h enum BinOpr
+  */
   case '+':	return OPR_ADD;
   case '-':	return OPR_SUB;
   case '*':	return OPR_MUL;
@@ -2228,9 +2247,11 @@ typedef struct LHSVarList {
 static void assign_compound (LexState *ls, LHSVarList *lh, LexToken opType) {
 
   FuncState * fs=ls->fs;
-  ExpDesc infix, rh;
+  ExpDesc lhv, infix, rh;
   int32_t nexps;
   BinOpr op;
+  /*store expression before grounding */
+  lhv = lh->v;
 
   checkcond(ls, VLOCAL <= lh->v.k && lh->v.k <= VINDEXED, LJ_ERR_XLEFTCOMPOUND);
 
@@ -2245,8 +2266,11 @@ static void assign_compound (LexState *ls, LHSVarList *lh, LexToken opType) {
   lj_lex_next(ls);
 
   /* store compound results in a new register (needed for nested tables) */
-  bcreg_reserve(fs, 1);
+  if(lh->v.k == VINDEXED) bcreg_reserve(fs, 1);
 
+  /* ground the lhs expresion */
+  expr_tonextreg(fs, &lh->v);
+  
   /* parse right-hand expression */
   nexps = expr_list(ls, &rh);
   checkcond(ls, nexps == 1, LJ_ERR_XRIGHTCOMPOUND);
@@ -2254,7 +2278,8 @@ static void assign_compound (LexState *ls, LHSVarList *lh, LexToken opType) {
   infix = lh->v;
   bcemit_binop_left(fs,op,&infix);
   bcemit_binop(fs, op, &infix, &rh);
-  bcemit_store(fs, &(lh->v), &infix);
+  /* use the lhs before grounding to store */
+  bcemit_store(fs, &lhv, &infix);
 }
 
 /* Eliminate write-after-read hazards for local variable assignment. */
@@ -2353,6 +2378,8 @@ static void parse_call_assign(LexState *ls)
   } else if (ls->tok >= TK_cadd && ls->tok <= TK_cmod) {
     vl.prev = NULL;
     assign_compound(ls, &vl, ls->tok);
+  } else if (ls->tok == ';') {
+    /* TK_PLUSPLUS, TK_MINUMINUS should be already managed */
   } else {  /* Start of an assignment. */
     vl.prev = NULL;
     parse_assignment(ls, &vl, 1);
@@ -2753,24 +2780,47 @@ static void parse_if(LexState *ls, BCLine line)
   BCPos flist;
   BCPos escapelist = NO_JMP;
   flist = parse_then(ls);
-  if (ls->tok == TK_else) {  /* Parse optional 'else' block. */
-    while (lex_opt(ls, TK_else)) {  /* Parse multiple 'else if' blocks. */
-      if (ls->tok == TK_if) {
-        jmp_append(fs, &escapelist, bcemit_jmp(fs));
-        jmp_tohere(fs, flist);
-        flist = parse_then(ls);
-        continue; /* try again nested ELSE IF */
-      }
-
-      jmp_append(fs, &escapelist, bcemit_jmp(fs));
-      jmp_tohere(fs, flist);
-      parse_block(ls);
-      break;
+check_else:
+  if (lex_opt(ls, TK_else)) {  /* Parse optional 'else' block. */
+    jmp_append(fs, &escapelist, bcemit_jmp(fs));
+    jmp_tohere(fs, flist);
+    if (ls->tok == TK_if) {
+      flist = parse_then(ls);
+      goto check_else; /* try again nested ELSE IF */
     }
+    parse_block(ls);
   } else {
     jmp_append(fs, &escapelist, flist);
   }
   jmp_tohere(fs, escapelist);
+}
+
+static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost) {
+  FuncState *fs = ls->fs;
+  ExpDesc lv, e1, e2;
+  BCReg indices;
+  if(!v) v = &lv;
+  indices = fs->freereg;
+  expr_init(&e2, VKNUM, 0);
+  setintV(&e2.u.nval, 1);
+  if(isPost) {
+    lv = e1 = *v;
+    if (v->k == VINDEXED)
+      bcreg_reserve(fs, 1);
+    expr_tonextreg(fs, v);
+    bcreg_reserve(fs, 1); //copy again to operate on it
+    bcemit_arith(fs, op, &e1, &e2);
+    bcemit_store(fs, &lv, &e1);
+    --fs->freereg; //remove extra copy register
+    return;
+  }
+  expr_primary(ls, v);
+  e1 = *v;
+  if (v->k == VINDEXED)
+    bcreg_reserve(fs, fs->freereg - indices);
+  bcemit_arith(fs, op, &e1, &e2);
+  bcemit_store(fs, v, &e1);
+  if(v != &lv) expr_tonextreg(fs, v);
 }
 
 /* -- Parse statements ---------------------------------------------------- */
@@ -2821,6 +2871,16 @@ static int parse_stmt(LexState *ls)
     lj_lex_next(ls);
     break;
 #endif
+  case TK_plusplus: {
+    lj_lex_next(ls);
+    inc_dec_op(ls, OPR_ADD, NULL, 0);
+    return 0;
+  }
+  case TK_minusminus: {
+    lj_lex_next(ls);
+    inc_dec_op(ls, OPR_SUB, NULL, 0);
+    return 0;
+  }
   case TK_name: {
       if (ls->c == ':') {/* stat -> label */
         parse_label(ls);
