@@ -1,14 +1,14 @@
-------------------------------------------------------------------------------
--- DynASM PPC/PPC64 module.
---
--- Copyright (C) 2005-2017 Mike Pall. All rights reserved.
--- See dynasm.lua for full copyright notice.
---
--- Support for various extensions contributed by Caio Souza Oliveira.
-------------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// DynASM PPC/PPC64 module.
+//
+// Copyright (C) 2005-2017 Mike Pall. All rights reserved.
+// See dynasm.lua for full copyright notice.
+//
+// Support for various extensions contributed by Caio Souza Oliveira.
+//----------------------------------------------------------------------------
 
--- Module information:
-local _info = {
+// Module information:
+var _info = {
   arch =	"ppc",
   description =	"DynASM PPC module",
   version =	"1.4.0",
@@ -16,231 +16,231 @@ local _info = {
   release =	"2015-10-18",
   author =	"Mike Pall",
   license =	"MIT",
-}
+};
 
--- Exported glue functions for the arch-specific module.
-local _M = { _info = _info }
+// Exported glue functions for the arch-specific module.
+var _M = { _info = _info };
 
--- Cache library functions.
-local type, tonumber, pairs, ipairs = type, tonumber, pairs, ipairs
-local assert, setmetatable = assert, setmetatable
-local _s = string
-local sub, format, byte, char = _s.sub, _s.format, _s.byte, _s.char
-local match, gmatch = _s.match, _s.gmatch
-local concat, sort = table.concat, table.sort
-local bit = bit or require("bit")
-local band, shl, shr, sar = bit.band, bit.lshift, bit.rshift, bit.arshift
-local tohex = bit.tohex
+// Cache library functions.
+var type, tonumber, pairs, ipairs = type, tonumber, pairs, ipairs;
+var assert, setmetatable = assert, setmetatable;
+var _s = string;
+var sub, format, byte, char = _s.sub, _s.format, _s.byte, _s.char;
+var match, gmatch = _s.match, _s.gmatch;
+var concat, sort = table.concat, table.sort;
+var bit = bit || require("bit");
+var band, shl, shr, sar = bit.band, bit.lshift, bit.rshift, bit.arshift;
+var tohex = bit.tohex;
 
--- Inherited tables and callbacks.
-local g_opt, g_arch
-local wline, werror, wfatal, wwarn
+// Inherited tables and callbacks.
+var g_opt, g_arch;
+var wline, werror, wfatal, wwarn;
 
--- Action name list.
--- CHECK: Keep this in sync with the C code!
-local action_names = {
+// Action name list.
+// CHECK: Keep this in sync with the C code!
+var action_names = {
   "STOP", "SECTION", "ESC", "REL_EXT",
   "ALIGN", "REL_LG", "LABEL_LG",
   "REL_PC", "LABEL_PC", "IMM", "IMMSH"
+};
+
+// Maximum number of section buffer positions for dasm_put().
+// CHECK: Keep this in sync with the C code!
+var maxsecpos = 25; // Keep this low, to avoid excessively long C lines.
+
+// Action name -> action number.
+var map_action = {};
+for( n,name in ipairs(action_names) ) {
+  map_action[name] = n-1;
 }
 
--- Maximum number of section buffer positions for dasm_put().
--- CHECK: Keep this in sync with the C code!
-local maxsecpos = 25 -- Keep this low, to avoid excessively long C lines.
+// Action list buffer.
+var actlist = {};
 
--- Action name -> action number.
-local map_action = {}
-for n,name in ipairs(action_names) do
-  map_action[name] = n-1
-end
+// Argument list for next dasm_put(). Start with offset 0 into action list.
+var actargs = { 0 };
 
--- Action list buffer.
-local actlist = {}
+// Current number of section buffer positions for dasm_put().
+var secpos = 1;
 
--- Argument list for next dasm_put(). Start with offset 0 into action list.
-local actargs = { 0 }
+//----------------------------------------------------------------------------
 
--- Current number of section buffer positions for dasm_put().
-local secpos = 1
+// Dump action names and numbers.
+var function dumpactions(out) {
+  out->write("DynASM encoding engine action codes:\n");
+  for( n,name in ipairs(action_names) ) {
+    var num = map_action[name];
+    out->write(format("  %-10s %02X  %d\n", name, num, num));
+  }
+  out->write("\n");
+}
 
-------------------------------------------------------------------------------
+// Write action list buffer as a huge static C array.
+var function writeactions(out, name) {
+  var nn = #actlist;
+  if( nn == 0 ) { nn = 1; actlist[0] = map_action.STOP; }
+  out->write("static const unsigned int ", name, "[", nn, "] = {\n");
+  for( i = 1,nn-1 ) {
+    assert(out->write("0x", tohex(actlist[i]), ",\n"));
+  }
+  assert(out->write("0x", tohex(actlist[nn]), "\n};\n\n"));
+}
 
--- Dump action names and numbers.
-local function dumpactions(out)
-  out:write("DynASM encoding engine action codes:\n")
-  for n,name in ipairs(action_names) do
-    local num = map_action[name]
-    out:write(format("  %-10s %02X  %d\n", name, num, num))
-  end
-  out:write("\n")
-end
+//----------------------------------------------------------------------------
 
--- Write action list buffer as a huge static C array.
-local function writeactions(out, name)
-  local nn = #actlist
-  if nn == 0 then nn = 1; actlist[0] = map_action.STOP end
-  out:write("static const unsigned int ", name, "[", nn, "] = {\n")
-  for i = 1,nn-1 do
-    assert(out:write("0x", tohex(actlist[i]), ",\n"))
-  end
-  assert(out:write("0x", tohex(actlist[nn]), "\n};\n\n"))
-end
+// Add word to action list.
+var function wputxw(n) {
+  assert(n >= 0 && n <= 0xffffffff && n % 1 == 0, "word out of range");
+  actlist[#actlist+1] = n;
+}
 
-------------------------------------------------------------------------------
+// Add action to list with optional arg. Advance buffer pos, too.
+var function waction(action, val, a, num) {
+  var w = assert(map_action[action], "bad action name `"..action.."'");
+  wputxw(w * 0x10000 + (val || 0));
+  if( a ) { actargs[#actargs+1] = a; }
+  if( a || num ) { secpos +=   (num || 1); }
+}
 
--- Add word to action list.
-local function wputxw(n)
-  assert(n >= 0 and n <= 0xffffffff and n % 1 == 0, "word out of range")
-  actlist[#actlist+1] = n
-end
+// Flush action list (intervening C code or buffer pos overflow).
+var function wflush(term) {
+  if( #actlist == actargs[1] ) { return; } // Nothing to flush.
+  if( ! term ) { waction("STOP"); } // Terminate action list.
+  wline(format("dasm_put(Dst, %s);", concat(actargs, ", ")), true);
+  actargs = { #actlist }; // Actionlist offset is 1st arg to next dasm_put().
+  secpos = 1; // The actionlist offset occupies a buffer position, too.
+}
 
--- Add action to list with optional arg. Advance buffer pos, too.
-local function waction(action, val, a, num)
-  local w = assert(map_action[action], "bad action name `"..action.."'")
-  wputxw(w * 0x10000 + (val or 0))
-  if a then actargs[#actargs+1] = a end
-  if a or num then secpos = secpos + (num or 1) end
-end
+// Put escaped word.
+var function wputw(n) {
+  if( n <= 0xffffff ) { waction("ESC"); }
+  wputxw(n);
+}
 
--- Flush action list (intervening C code or buffer pos overflow).
-local function wflush(term)
-  if #actlist == actargs[1] then return end -- Nothing to flush.
-  if not term then waction("STOP") end -- Terminate action list.
-  wline(format("dasm_put(Dst, %s);", concat(actargs, ", ")), true)
-  actargs = { #actlist } -- Actionlist offset is 1st arg to next dasm_put().
-  secpos = 1 -- The actionlist offset occupies a buffer position, too.
-end
+// Reserve position for word.
+var function wpos() {
+  var pos = #actlist+1;
+  actlist[pos] = "";
+  return pos;
+}
 
--- Put escaped word.
-local function wputw(n)
-  if n <= 0xffffff then waction("ESC") end
-  wputxw(n)
-end
+// Store word to reserved position.
+var function wputpos(pos, n) {
+  assert(n >= 0 && n <= 0xffffffff && n % 1 == 0, "word out of range");
+  actlist[pos] = n;
+}
 
--- Reserve position for word.
-local function wpos()
-  local pos = #actlist+1
-  actlist[pos] = ""
-  return pos
-end
+//----------------------------------------------------------------------------
 
--- Store word to reserved position.
-local function wputpos(pos, n)
-  assert(n >= 0 and n <= 0xffffffff and n % 1 == 0, "word out of range")
-  actlist[pos] = n
-end
+// Global label name -> global label number. With auto assignment on 1st use.
+var next_global = 20;
+var map_global = setmetatable({}, { __index = function(t, name) {
+  if( ! match(name, "^[%a_][%w_]*$") ) { werror("bad global label"); }
+  var n = next_global;
+  if( n > 2047 ) { werror("too many global labels"); }
+  next_global = n + 1;
+  t[name] = n;
+  return n;
+}});
 
-------------------------------------------------------------------------------
+// Dump global labels.
+var function dumpglobals(out, lvl) {
+  var t = {};
+  for( name, n in pairs(map_global) ) { t[n] = name; }
+  out->write("Global labels:\n");
+  for( i=20,next_global-1 ) {
+    out->write(format("  %s\n", t[i]));
+  }
+  out->write("\n");
+}
 
--- Global label name -> global label number. With auto assignment on 1st use.
-local next_global = 20
-local map_global = setmetatable({}, { __index = function(t, name)
-  if not match(name, "^[%a_][%w_]*$") then werror("bad global label") end
-  local n = next_global
-  if n > 2047 then werror("too many global labels") end
-  next_global = n + 1
-  t[name] = n
-  return n
-end})
+// Write global label enum.
+var function writeglobals(out, prefix) {
+  var t = {};
+  for( name, n in pairs(map_global) ) { t[n] = name; }
+  out->write("enum {\n");
+  for( i=20,next_global-1 ) {
+    out->write("  ", prefix, t[i], ",\n");
+  }
+  out->write("  ", prefix, "_MAX\n};\n");
+}
 
--- Dump global labels.
-local function dumpglobals(out, lvl)
-  local t = {}
-  for name, n in pairs(map_global) do t[n] = name end
-  out:write("Global labels:\n")
-  for i=20,next_global-1 do
-    out:write(format("  %s\n", t[i]))
-  end
-  out:write("\n")
-end
+// Write global label names.
+var function writeglobalnames(out, name) {
+  var t = {};
+  for( name, n in pairs(map_global) ) { t[n] = name; }
+  out->write("static const char *const ", name, "[] = {\n");
+  for( i=20,next_global-1 ) {
+    out->write("  \"", t[i], "\",\n");
+  }
+  out->write("  (const char *)0\n};\n");
+}
 
--- Write global label enum.
-local function writeglobals(out, prefix)
-  local t = {}
-  for name, n in pairs(map_global) do t[n] = name end
-  out:write("enum {\n")
-  for i=20,next_global-1 do
-    out:write("  ", prefix, t[i], ",\n")
-  end
-  out:write("  ", prefix, "_MAX\n};\n")
-end
+//----------------------------------------------------------------------------
 
--- Write global label names.
-local function writeglobalnames(out, name)
-  local t = {}
-  for name, n in pairs(map_global) do t[n] = name end
-  out:write("static const char *const ", name, "[] = {\n")
-  for i=20,next_global-1 do
-    out:write("  \"", t[i], "\",\n")
-  end
-  out:write("  (const char *)0\n};\n")
-end
+// Extern label name -> extern label number. With auto assignment on 1st use.
+var next_extern = 0;
+var map_extern_ = {};
+var map_extern = setmetatable({}, { __index = function(t, name) {
+  // No restrictions on the name for now.
+  var n = next_extern;
+  if( n > 2047 ) { werror("too many extern labels"); }
+  next_extern = n + 1;
+  t[name] = n;
+  map_extern_[n] = name;
+  return n;
+}});
 
-------------------------------------------------------------------------------
+// Dump extern labels.
+var function dumpexterns(out, lvl) {
+  out->write("Extern labels:\n");
+  for( i=0,next_extern-1 ) {
+    out->write(format("  %s\n", map_extern_[i]));
+  }
+  out->write("\n");
+}
 
--- Extern label name -> extern label number. With auto assignment on 1st use.
-local next_extern = 0
-local map_extern_ = {}
-local map_extern = setmetatable({}, { __index = function(t, name)
-  -- No restrictions on the name for now.
-  local n = next_extern
-  if n > 2047 then werror("too many extern labels") end
-  next_extern = n + 1
-  t[name] = n
-  map_extern_[n] = name
-  return n
-end})
+// Write extern label names.
+var function writeexternnames(out, name) {
+  out->write("static const char *const ", name, "[] = {\n");
+  for( i=0,next_extern-1 ) {
+    out->write("  \"", map_extern_[i], "\",\n");
+  }
+  out->write("  (const char *)0\n};\n");
+}
 
--- Dump extern labels.
-local function dumpexterns(out, lvl)
-  out:write("Extern labels:\n")
-  for i=0,next_extern-1 do
-    out:write(format("  %s\n", map_extern_[i]))
-  end
-  out:write("\n")
-end
+//----------------------------------------------------------------------------
 
--- Write extern label names.
-local function writeexternnames(out, name)
-  out:write("static const char *const ", name, "[] = {\n")
-  for i=0,next_extern-1 do
-    out:write("  \"", map_extern_[i], "\",\n")
-  end
-  out:write("  (const char *)0\n};\n")
-end
+// Arch-specific maps.
+var map_archdef = { sp = "r1" }; // Ext. register name -> int. name.
 
-------------------------------------------------------------------------------
+var map_type = {};		// Type name -> { ctype, reg }
+var ctypenum = 0;		// Type number (for Dt... macros).
 
--- Arch-specific maps.
-local map_archdef = { sp = "r1" } -- Ext. register name -> int. name.
+// Reverse defines for registers.
+function _M.revdef(s) {
+  if( s == "r1" ) { return "sp"; }
+  return s;
+}
 
-local map_type = {}		-- Type name -> { ctype, reg }
-local ctypenum = 0		-- Type number (for Dt... macros).
-
--- Reverse defines for registers.
-function _M.revdef(s)
-  if s == "r1" then return "sp" end
-  return s
-end
-
-local map_cond = {
+var map_cond = {
   lt = 0, gt = 1, eq = 2, so = 3,
   ge = 4, le = 5, ne = 6, ns = 7,
+};
+
+//----------------------------------------------------------------------------
+
+var map_op, op_template;
+
+var function op_alias(opname, f) {
+  return function(params, nparams) {
+    if( ! params ) { return "-> "..opname->sub(1, -3); }
+    f(params, nparams);
+    op_template(params, map_op[opname], nparams);
+  };
 }
 
-------------------------------------------------------------------------------
-
-local map_op, op_template
-
-local function op_alias(opname, f)
-  return function(params, nparams)
-    if not params then return "-> "..opname:sub(1, -3) end
-    f(params, nparams)
-    op_template(params, map_op[opname], nparams)
-  end
-end
-
--- Template strings for PPC instructions.
+// Template strings for PPC instructions.
 map_op = {
   tdi_3 =	"08000000ARI",
   twi_3 =	"0c000000ARI",
@@ -303,40 +303,40 @@ map_op = {
   stfsu_2 =	"d4000000FD",
   stfd_2 =	"d8000000FD",
   stfdu_2 =	"dc000000FD",
-  ld_2 =	"e8000000RD", -- NYI: displacement must be divisible by 4.
+  ld_2 =	"e8000000RD", // NYI: displacement must be divisible by 4.
   ldu_2 =	"e8000001RD",
   lwa_2 =	"e8000002RD",
   std_2 =	"f8000000RD",
   stdu_2 =	"f8000001RD",
 
-  subi_3 =	op_alias("addi_3", function(p) p[3] = "-("..p[3]..")" end),
-  subis_3 =	op_alias("addis_3", function(p) p[3] = "-("..p[3]..")" end),
-  subic_3 =	op_alias("addic_3", function(p) p[3] = "-("..p[3]..")" end),
-  ["subic._3"] = op_alias("addic._3", function(p) p[3] = "-("..p[3]..")" end),
+  subi_3 =	op_alias("addi_3", function(p) { p[3] = "-("..p[3]..")"; }),
+  subis_3 =	op_alias("addis_3", function(p) { p[3] = "-("..p[3]..")"; }),
+  subic_3 =	op_alias("addic_3", function(p) { p[3] = "-("..p[3]..")"; }),
+  ["subic._3"] = op_alias("addic._3", function(p) { p[3] = "-("..p[3]..")"; }),
 
-  rotlwi_3 =	op_alias("rlwinm_5", function(p)
-    p[4] = "0"; p[5] = "31"
-  end),
-  rotrwi_3 =	op_alias("rlwinm_5", function(p)
-    p[3] = "32-("..p[3]..")"; p[4] = "0"; p[5] = "31"
-  end),
-  rotlw_3 =	op_alias("rlwnm_5", function(p)
-    p[4] = "0"; p[5] = "31"
-  end),
-  slwi_3 =	op_alias("rlwinm_5", function(p)
-    p[5] = "31-("..p[3]..")"; p[4] = "0"
-  end),
-  srwi_3 =	op_alias("rlwinm_5", function(p)
-    p[4] = p[3]; p[3] = "32-("..p[3]..")"; p[5] = "31"
-  end),
-  clrlwi_3 =	op_alias("rlwinm_5", function(p)
-    p[4] = p[3]; p[3] = "0"; p[5] = "31"
-  end),
-  clrrwi_3 =	op_alias("rlwinm_5", function(p)
-    p[5] = "31-("..p[3]..")"; p[3] = "0"; p[4] = "0"
-  end),
+  rotlwi_3 =	op_alias("rlwinm_5", function(p) {
+    p[4] = "0"; p[5] = "31";
+  }),
+  rotrwi_3 =	op_alias("rlwinm_5", function(p) {
+    p[3] = "32-("..p[3]..")"; p[4] = "0"; p[5] = "31";
+  }),
+  rotlw_3 =	op_alias("rlwnm_5", function(p) {
+    p[4] = "0"; p[5] = "31";
+  }),
+  slwi_3 =	op_alias("rlwinm_5", function(p) {
+    p[5] = "31-("..p[3]..")"; p[4] = "0";
+  }),
+  srwi_3 =	op_alias("rlwinm_5", function(p) {
+    p[4] = p[3]; p[3] = "32-("..p[3]..")"; p[5] = "31";
+  }),
+  clrlwi_3 =	op_alias("rlwinm_5", function(p) {
+    p[4] = p[3]; p[3] = "0"; p[5] = "31";
+  }),
+  clrrwi_3 =	op_alias("rlwinm_5", function(p) {
+    p[5] = "31-("..p[3]..")"; p[3] = "0"; p[4] = "0";
+  }),
 
-  -- Primary opcode 4:
+  // Primary opcode 4:
   mulhhwu_3 =		"10000010RRR.",
   machhwu_3 =		"10000018RRR.",
   mulhhw_3 =		"10000050RRR.",
@@ -553,7 +553,7 @@ map_op = {
   ["vcmpbfp._3"] =	"100007c6VVV",
   ["vcmpgtsd._3"] =	"100007c7VVV",
 
-  -- Primary opcode 19:
+  // Primary opcode 19:
   mcrf_2 =	"4c000000XX",
   isync_0 =	"4c00012c",
   crnor_3 =	"4c000042CCC",
@@ -579,7 +579,7 @@ map_op = {
   bctr_0 =	"4e800420",
   bctrl_0 =	"4e800421",
 
-  -- Primary opcode 31:
+  // Primary opcode 31:
   cmpw_3 =	"7c000000XRR",
   cmpw_2 =	"7c000000-RR",
   cmpd_3 =	"7c200000XRR",
@@ -819,7 +819,7 @@ map_op = {
   stxvw4x_3 =	"7c000718QRR",
   stxvd2x_3 =	"7c000798QRR",
 
-  -- Primary opcode 30:
+  // Primary opcode 30:
   rldicl_4 =	"78000000RR~HM.",
   rldicr_4 =	"78000004RR~HM.",
   rldic_4 =	"78000008RR~HM.",
@@ -827,35 +827,35 @@ map_op = {
   rldcl_4 =	"78000010RR~RM.",
   rldcr_4 =	"78000012RR~RM.",
 
-  rotldi_3 =	op_alias("rldicl_4", function(p)
-    p[4] = "0"
-  end),
-  rotrdi_3 =	op_alias("rldicl_4", function(p)
-    p[3] = "64-("..p[3]..")"; p[4] = "0"
-  end),
-  rotld_3 =	op_alias("rldcl_4", function(p)
-    p[4] = "0"
-  end),
-  sldi_3 =	op_alias("rldicr_4", function(p)
-    p[4] = "63-("..p[3]..")"
-  end),
-  srdi_3 =	op_alias("rldicl_4", function(p)
-    p[4] = p[3]; p[3] = "64-("..p[3]..")"
-  end),
-  clrldi_3 =	op_alias("rldicl_4", function(p)
-    p[4] = p[3]; p[3] = "0"
-  end),
-  clrrdi_3 =	op_alias("rldicr_4", function(p)
-    p[4] = "63-("..p[3]..")"; p[3] = "0"
-  end),
+  rotldi_3 =	op_alias("rldicl_4", function(p) {
+    p[4] = "0";
+  }),
+  rotrdi_3 =	op_alias("rldicl_4", function(p) {
+    p[3] = "64-("..p[3]..")"; p[4] = "0";
+  }),
+  rotld_3 =	op_alias("rldcl_4", function(p) {
+    p[4] = "0";
+  }),
+  sldi_3 =	op_alias("rldicr_4", function(p) {
+    p[4] = "63-("..p[3]..")";
+  }),
+  srdi_3 =	op_alias("rldicl_4", function(p) {
+    p[4] = p[3]; p[3] = "64-("..p[3]..")";
+  }),
+  clrldi_3 =	op_alias("rldicl_4", function(p) {
+    p[4] = p[3]; p[3] = "0";
+  }),
+  clrrdi_3 =	op_alias("rldicr_4", function(p) {
+    p[4] = "63-("..p[3]..")"; p[3] = "0";
+  }),
 
-  -- Primary opcode 56:
-  lq_2 =	"e0000000R:D", -- NYI: displacement must be divisible by 8.
+  // Primary opcode 56:
+  lq_2 =	"e0000000R:D", // NYI: displacement must be divisible by 8.
 
-  -- Primary opcode 57:
-  lfdp_2 =	"e4000000F:D", -- NYI: displacement must be divisible by 4.
+  // Primary opcode 57:
+  lfdp_2 =	"e4000000F:D", // NYI: displacement must be divisible by 4.
 
-  -- Primary opcode 59:
+  // Primary opcode 59:
   fdivs_3 =	"ec000024FFF.",
   fsubs_3 =	"ec000028FFF.",
   fadds_3 =	"ec00002aFFF.",
@@ -896,7 +896,7 @@ map_op = {
   denbcd_3 =	"ec000684YF~F.",
   diex_3 =	"ec0006c4FFF.",
 
-  -- Primary opcode 60:
+  // Primary opcode 60:
   xsaddsp_3 =		"f0000000QQQ",
   xsmaddasp_3 =		"f0000008QQQ",
   xxsldwi_4 =		"f0000010QQQz",
@@ -1056,13 +1056,13 @@ map_op = {
   xvcvsxddp_2 =		"f00007e0Q-Q",
   xvnegdp_2 =		"f00007e4Q-Q",
 
-  -- Primary opcode 61:
-  stfdp_2 =	"f4000000F:D", -- NYI: displacement must be divisible by 4.
+  // Primary opcode 61:
+  stfdp_2 =	"f4000000F:D", // NYI: displacement must be divisible by 4.
 
-  -- Primary opcode 62:
-  stq_2 =	"f8000002R:D", -- NYI: displacement must be divisible by 8.
+  // Primary opcode 62:
+  stq_2 =	"f8000002R:D", // NYI: displacement must be divisible by 8.
 
-  -- Primary opcode 63:
+  // Primary opcode 63:
   fdiv_3 =	"fc000024FFF.",
   fsub_3 =	"fc000028FFF.",
   fadd_3 =	"fc00002aFFF.",
@@ -1089,7 +1089,7 @@ map_op = {
   ftdiv_2 =	"fc000100X-F.",
   fctiwu_2 =	"fc00011cF-F.",
   fctiwuz_2 =	"fc00011eF-F.",
-  mtfsfi_2 =	"fc00010cAA", -- NYI: upshift.
+  mtfsfi_2 =	"fc00010cAA", // NYI: upshift.
   fnabs_2 =	"fc000110F-F.",
   ftsqrt_2 =	"fc000140X-F.",
   fabs_2 =	"fc000210F-F.",
@@ -1098,7 +1098,7 @@ map_op = {
   frip_2 =	"fc000390F-F.",
   frim_2 =	"fc0003d0F-F.",
   mffs_1 =	"fc00048eF.",
-  -- NYI: mtfsf, mtfsb0, mtfsb1.
+  // NYI: mtfsf, mtfsb0, mtfsb1.
   fctid_2 =	"fc00065cF-F.",
   fctidz_2 =	"fc00065eF-F.",
   fmrgow_3 =	"fc00068cFFF",
@@ -1134,7 +1134,7 @@ map_op = {
   denbcdq_3 =	"fc000684YF:~F:.",
   diexq_3 =	"fc0006c4F:FF:.",
 
-  -- Primary opcode 4, SPE APU extension:
+  // Primary opcode 4, SPE APU extension:
   evaddw_3 =		"10000200RRR",
   evaddiw_3 =		"10000202RAR~",
   evsubw_3 =		"10000204RRR~",
@@ -1410,510 +1410,512 @@ map_op = {
   evmwlumianw_3 =	"100005c8RRR",
   evmwlsmianw_3 =	"100005c9RRR",
 
-  -- NYI: Book E instructions.
+  // NYI: Book E instructions.
+};
+
+// Add mnemonics for "." variants.
+{
+  var t = {};
+  for( k,v in pairs(map_op) ) {
+    if( type(v) == "string" && sub(v, -1) == "." ) {
+      var v2 = sub(v, 1, 7)..char(byte(v, 8)+1)..sub(v, 9, -2);
+      t[sub(k, 1, -3).."."..sub(k, -2)] = v2;
+    }
+  }
+  for( k,v in pairs(t) ) {
+    map_op[k] = v;
+  }
 }
 
--- Add mnemonics for "." variants.
-do
-  local t = {}
-  for k,v in pairs(map_op) do
-    if type(v) == "string" and sub(v, -1) == "." then
-      local v2 = sub(v, 1, 7)..char(byte(v, 8)+1)..sub(v, 9, -2)
-      t[sub(k, 1, -3).."."..sub(k, -2)] = v2
-    end
-  end
-  for k,v in pairs(t) do
-    map_op[k] = v
-  end
-end
+// Add more branch mnemonics.
+for( cond,c in pairs(map_cond) ) {
+  var b1 = "b"..cond;
+  var c1 = shl(band(c, 3), 16) + (c < 4 && 0x01000000 || 0);
+  // bX[l]
+  map_op[b1.."_1"] = tohex(0x40800000 + c1).."K";
+  map_op[b1.."y_1"] = tohex(0x40a00000 + c1).."K";
+  map_op[b1.."l_1"] = tohex(0x40800001 + c1).."K";
+  map_op[b1.."_2"] = tohex(0x40800000 + c1).."-XK";
+  map_op[b1.."y_2"] = tohex(0x40a00000 + c1).."-XK";
+  map_op[b1.."l_2"] = tohex(0x40800001 + c1).."-XK";
+  // bXlr[l]
+  map_op[b1.."lr_0"] = tohex(0x4c800020 + c1);
+  map_op[b1.."lrl_0"] = tohex(0x4c800021 + c1);
+  map_op[b1.."ctr_0"] = tohex(0x4c800420 + c1);
+  map_op[b1.."ctrl_0"] = tohex(0x4c800421 + c1);
+  // bXctr[l]
+  map_op[b1.."lr_1"] = tohex(0x4c800020 + c1).."-X";
+  map_op[b1.."lrl_1"] = tohex(0x4c800021 + c1).."-X";
+  map_op[b1.."ctr_1"] = tohex(0x4c800420 + c1).."-X";
+  map_op[b1.."ctrl_1"] = tohex(0x4c800421 + c1).."-X";
+}
 
--- Add more branch mnemonics.
-for cond,c in pairs(map_cond) do
-  local b1 = "b"..cond
-  local c1 = shl(band(c, 3), 16) + (c < 4 and 0x01000000 or 0)
-  -- bX[l]
-  map_op[b1.."_1"] = tohex(0x40800000 + c1).."K"
-  map_op[b1.."y_1"] = tohex(0x40a00000 + c1).."K"
-  map_op[b1.."l_1"] = tohex(0x40800001 + c1).."K"
-  map_op[b1.."_2"] = tohex(0x40800000 + c1).."-XK"
-  map_op[b1.."y_2"] = tohex(0x40a00000 + c1).."-XK"
-  map_op[b1.."l_2"] = tohex(0x40800001 + c1).."-XK"
-  -- bXlr[l]
-  map_op[b1.."lr_0"] = tohex(0x4c800020 + c1)
-  map_op[b1.."lrl_0"] = tohex(0x4c800021 + c1)
-  map_op[b1.."ctr_0"] = tohex(0x4c800420 + c1)
-  map_op[b1.."ctrl_0"] = tohex(0x4c800421 + c1)
-  -- bXctr[l]
-  map_op[b1.."lr_1"] = tohex(0x4c800020 + c1).."-X"
-  map_op[b1.."lrl_1"] = tohex(0x4c800021 + c1).."-X"
-  map_op[b1.."ctr_1"] = tohex(0x4c800420 + c1).."-X"
-  map_op[b1.."ctrl_1"] = tohex(0x4c800421 + c1).."-X"
-end
+//----------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
+var function parse_gpr(expr) {
+  var tname, ovreg = match(expr, "^([%w_]+):(r[1-3]?[0-9])$");
+  var tp = map_type[tname || expr];
+  if( tp ) {
+    var reg = ovreg || tp.reg;
+    if( ! reg ) {
+      werror("type `"..(tname || expr).."' needs a register override");
+    }
+    expr = reg;
+  }
+  var r = match(expr, "^r([1-3]?[0-9])$");
+  if( r ) {
+    r = tonumber(r);
+    if( r <= 31 ) { return r, tp; }
+  }
+  werror("bad register name `"..expr.."'");
+}
 
-local function parse_gpr(expr)
-  local tname, ovreg = match(expr, "^([%w_]+):(r[1-3]?[0-9])$")
-  local tp = map_type[tname or expr]
-  if tp then
-    local reg = ovreg or tp.reg
-    if not reg then
-      werror("type `"..(tname or expr).."' needs a register override")
-    end
-    expr = reg
-  end
-  local r = match(expr, "^r([1-3]?[0-9])$")
-  if r then
-    r = tonumber(r)
-    if r <= 31 then return r, tp end
-  end
-  werror("bad register name `"..expr.."'")
-end
+var function parse_fpr(expr) {
+  var r = match(expr, "^f([1-3]?[0-9])$");
+  if( r ) {
+    r = tonumber(r);
+    if( r <= 31 ) { return r; }
+  }
+  werror("bad register name `"..expr.."'");
+}
 
-local function parse_fpr(expr)
-  local r = match(expr, "^f([1-3]?[0-9])$")
-  if r then
-    r = tonumber(r)
-    if r <= 31 then return r end
-  end
-  werror("bad register name `"..expr.."'")
-end
+var function parse_vr(expr) {
+  var r = match(expr, "^v([1-3]?[0-9])$");
+  if( r ) {
+    r = tonumber(r);
+    if( r <= 31 ) { return r; }
+  }
+  werror("bad register name `"..expr.."'");
+}
 
-local function parse_vr(expr)
-  local r = match(expr, "^v([1-3]?[0-9])$")
-  if r then
-    r = tonumber(r)
-    if r <= 31 then return r end
-  end
-  werror("bad register name `"..expr.."'")
-end
+var function parse_vs(expr) {
+  var r = match(expr, "^vs([1-6]?[0-9])$");
+  if( r ) {
+    r = tonumber(r);
+    if( r <= 63 ) { return r; }
+  }
+  werror("bad register name `"..expr.."'");
+}
 
-local function parse_vs(expr)
-  local r = match(expr, "^vs([1-6]?[0-9])$")
-  if r then
-    r = tonumber(r)
-    if r <= 63 then return r end
-  end
-  werror("bad register name `"..expr.."'")
-end
+var function parse_cr(expr) {
+  var r = match(expr, "^cr([0-7])$");
+  if( r ) { return tonumber(r); }
+  werror("bad condition register name `"..expr.."'");
+}
 
-local function parse_cr(expr)
-  local r = match(expr, "^cr([0-7])$")
-  if r then return tonumber(r) end
-  werror("bad condition register name `"..expr.."'")
-end
+var function parse_cond(expr) {
+  var r, cond = match(expr, "^4%*cr([0-7])%+(%w%w)$");
+  if( r ) {
+    r = tonumber(r);
+    var c = map_cond[cond];
+    if( c && c < 4 ) { return r*4+c; }
+  }
+  werror("bad condition bit name `"..expr.."'");
+}
 
-local function parse_cond(expr)
-  local r, cond = match(expr, "^4%*cr([0-7])%+(%w%w)$")
-  if r then
-    r = tonumber(r)
-    local c = map_cond[cond]
-    if c and c < 4 then return r*4+c end
-  end
-  werror("bad condition bit name `"..expr.."'")
-end
+var parse_ctx = {};
 
-local parse_ctx = {}
+var loadenv = setfenv && function(s) {
+  var code = loadstring(s, "");
+  if( code ) { setfenv(code, parse_ctx); }
+  return code;
+} || function(s) {
+  return load(s, "", null, parse_ctx);
+};
 
-local loadenv = setfenv and function(s)
-  local code = loadstring(s, "")
-  if code then setfenv(code, parse_ctx) end
-  return code
-end or function(s)
-  return load(s, "", nil, parse_ctx)
-end
+// Try to parse simple arithmetic, too, since some basic ops are aliases.
+var function parse_number(n) {
+  var x = tonumber(n);
+  if( x ) { return x; }
+  var code = loadenv("return "..n);
+  if( code ) {
+    var ok, y = pcall(code);
+    if( ok ) { return y; }
+  }
+  return null;
+}
 
--- Try to parse simple arithmetic, too, since some basic ops are aliases.
-local function parse_number(n)
-  local x = tonumber(n)
-  if x then return x end
-  local code = loadenv("return "..n)
-  if code then
-    local ok, y = pcall(code)
-    if ok then return y end
-  end
-  return nil
-end
-
-local function parse_imm(imm, bits, shift, scale, signed)
-  local n = parse_number(imm)
-  if n then
-    local m = sar(n, scale)
-    if shl(m, scale) == n then
-      if signed then
-	local s = sar(m, bits-1)
-	if s == 0 then return shl(m, shift)
-	elseif s == -1 then return shl(m + shl(1, bits), shift) end
-      else
-	if sar(m, bits) == 0 then return shl(m, shift) end
-      end
-    end
-    werror("out of range immediate `"..imm.."'")
-  elseif match(imm, "^[rfv]([1-3]?[0-9])$") or
-	 match(imm, "^vs([1-6]?[0-9])$") or
-	 match(imm, "^([%w_]+):(r[1-3]?[0-9])$") then
-    werror("expected immediate operand, got register")
-  else
-    waction("IMM", (signed and 32768 or 0)+scale*1024+bits*32+shift, imm)
-    return 0
-  end
-end
-
-local function parse_shiftmask(imm, isshift)
-  local n = parse_number(imm)
-  if n then
-    if shr(n, 6) == 0 then
-      local lsb = band(n, 31)
-      local msb = n - lsb
-      return isshift and (shl(lsb, 11)+shr(msb, 4)) or (shl(lsb, 6)+msb)
-    end
-    werror("out of range immediate `"..imm.."'")
-  elseif match(imm, "^r([1-3]?[0-9])$") or
-	 match(imm, "^([%w_]+):(r[1-3]?[0-9])$") then
-    werror("expected immediate operand, got register")
-  else
-    waction("IMMSH", isshift and 1 or 0, imm)
+var function parse_imm(imm, bits, shift, scale, signed) {
+  var n = parse_number(imm);
+  if( n ) {
+    var m = sar(n, scale);
+    if( shl(m, scale) == n ) {
+      if( signed ) {
+	var s = sar(m, bits-1);
+	if( s == 0 ) { return shl(m, shift);
+	} else if( s == -1 ) { return shl(m + shl(1, bits), shift); }
+      } else {
+	if( sar(m, bits) == 0 ) { return shl(m, shift); }
+      }
+    }
+    werror("out of range immediate `"..imm.."'");
+  } else if( match(imm, "^[rfv]([1-3]?[0-9])$") ||
+	 match(imm, "^vs([1-6]?[0-9])$") ||
+	 match(imm, "^([%w_]+):(r[1-3]?[0-9])$") ) {
+    werror("expected immediate operand, got register");
+  } else {
+    waction("IMM", (signed && 32768 || 0)+scale*1024+bits*32+shift, imm);
     return 0;
-  end
-end
+  }
+}
 
-local function parse_disp(disp)
-  local imm, reg = match(disp, "^(.*)%(([%w_:]+)%)$")
-  if imm then
-    local r = parse_gpr(reg)
-    if r == 0 then werror("cannot use r0 in displacement") end
-    return shl(r, 16) + parse_imm(imm, 16, 0, 0, true)
-  end
-  local reg, tailr = match(disp, "^([%w_:]+)%s*(.*)$")
-  if reg and tailr ~= "" then
-    local r, tp = parse_gpr(reg)
-    if r == 0 then werror("cannot use r0 in displacement") end
-    if tp then
-      waction("IMM", 32768+16*32, format(tp.ctypefmt, tailr))
-      return shl(r, 16)
-    end
-  end
-  werror("bad displacement `"..disp.."'")
-end
+var function parse_shiftmask(imm, isshift) {
+  var n = parse_number(imm);
+  if( n ) {
+    if( shr(n, 6) == 0 ) {
+      var lsb = band(n, 31);
+      var msb = n - lsb;
+      return isshift && (shl(lsb, 11)+shr(msb, 4)) || (shl(lsb, 6)+msb);
+    }
+    werror("out of range immediate `"..imm.."'");
+  } else if( match(imm, "^r([1-3]?[0-9])$") ||
+	 match(imm, "^([%w_]+):(r[1-3]?[0-9])$") ) {
+    werror("expected immediate operand, got register");
+  } else {
+    waction("IMMSH", isshift && 1 || 0, imm);
+    return 0;
+  }
+}
 
-local function parse_u5disp(disp, scale)
-  local imm, reg = match(disp, "^(.*)%(([%w_:]+)%)$")
-  if imm then
-    local r = parse_gpr(reg)
-    if r == 0 then werror("cannot use r0 in displacement") end
-    return shl(r, 16) + parse_imm(imm, 5, 11, scale, false)
-  end
-  local reg, tailr = match(disp, "^([%w_:]+)%s*(.*)$")
-  if reg and tailr ~= "" then
-    local r, tp = parse_gpr(reg)
-    if r == 0 then werror("cannot use r0 in displacement") end
-    if tp then
-      waction("IMM", scale*1024+5*32+11, format(tp.ctypefmt, tailr))
-      return shl(r, 16)
-    end
-  end
-  werror("bad displacement `"..disp.."'")
-end
+var function parse_disp(disp) {
+  var imm, reg = match(disp, "^(.*)%(([%w_:]+)%)$");
+  if( imm ) {
+    var r = parse_gpr(reg);
+    if( r == 0 ) { werror("cannot use r0 in displacement"); }
+    return shl(r, 16) + parse_imm(imm, 16, 0, 0, true);
+  }
+  var tailr;
+  reg, tailr = match(disp, "^([%w_:]+)%s*(.*)$");
+  if( reg && tailr != "" ) {
+    var r, tp = parse_gpr(reg);
+    if( r == 0 ) { werror("cannot use r0 in displacement"); }
+    if( tp ) {
+      waction("IMM", 32768+16*32, format(tp.ctypefmt, tailr));
+      return shl(r, 16);
+    }
+  }
+  werror("bad displacement `"..disp.."'");
+}
 
-local function parse_label(label, def)
-  local prefix = sub(label, 1, 2)
-  -- =>label (pc label reference)
-  if prefix == "=>" then
-    return "PC", 0, sub(label, 3)
-  end
-  -- ->name (global label reference)
-  if prefix == "->" then
-    return "LG", map_global[sub(label, 3)]
-  end
-  if def then
-    -- [1-9] (local label definition)
-    if match(label, "^[1-9]$") then
-      return "LG", 10+tonumber(label)
-    end
-  else
-    -- [<>][1-9] (local label reference)
-    local dir, lnum = match(label, "^([<>])([1-9])$")
-    if dir then -- Fwd: 1-9, Bkwd: 11-19.
-      return "LG", lnum + (dir == ">" and 0 or 10)
-    end
-    -- extern label (extern label reference)
-    local extname = match(label, "^extern%s+(%S+)$")
-    if extname then
-      return "EXT", map_extern[extname]
-    end
-  end
-  werror("bad label `"..label.."'")
-end
+var function parse_u5disp(disp, scale) {
+  var imm, reg = match(disp, "^(.*)%(([%w_:]+)%)$");
+  if( imm ) {
+    var r = parse_gpr(reg);
+    if( r == 0 ) { werror("cannot use r0 in displacement"); }
+    return shl(r, 16) + parse_imm(imm, 5, 11, scale, false);
+  }
+  var tailr;
+  reg, tailr = match(disp, "^([%w_:]+)%s*(.*)$");
+  if( reg && tailr != "" ) {
+    var r, tp = parse_gpr(reg);
+    if( r == 0 ) { werror("cannot use r0 in displacement"); }
+    if( tp ) {
+      waction("IMM", scale*1024+5*32+11, format(tp.ctypefmt, tailr));
+      return shl(r, 16);
+    }
+  }
+  werror("bad displacement `"..disp.."'");
+}
 
-------------------------------------------------------------------------------
+var function parse_label(label, def) {
+  var prefix = sub(label, 1, 2);
+  // =>label (pc label reference)
+  if( prefix == "=>" ) {
+    return "PC", 0, sub(label, 3);
+  }
+  // ->name (global label reference)
+  if( prefix == "->" ) {
+    return "LG", map_global[sub(label, 3)];
+  }
+  if( def ) {
+    // [1-9] (local label definition)
+    if( match(label, "^[1-9]$") ) {
+      return "LG", 10+tonumber(label);
+    }
+  } else {
+    // [<>][1-9] (local label reference)
+    var dir, lnum = match(label, "^([<>])([1-9])$");
+    if( dir ) { // Fwd: 1-9, Bkwd: 11-19.
+      return "LG", lnum + (dir == ">" && 0 || 10);
+    }
+    // extern label (extern label reference)
+    var extname = match(label, "^extern%s+(%S+)$");
+    if( extname ) {
+      return "EXT", map_extern[extname];
+    }
+  }
+  werror("bad label `"..label.."'");
+}
 
--- Handle opcodes defined with template strings.
-op_template = function(params, template, nparams)
-  if not params then return sub(template, 9) end
-  local op = tonumber(sub(template, 1, 8), 16)
-  local n, rs = 1, 26
+//----------------------------------------------------------------------------
 
-  -- Limit number of section buffer positions used by a single dasm_put().
-  -- A single opcode needs a maximum of 3 positions (rlwinm).
-  if secpos+3 > maxsecpos then wflush() end
-  local pos = wpos()
+// Handle opcodes defined with template strings.
+op_template = function(params, template, nparams) {
+  if( ! params ) { return sub(template, 9); }
+  var op = tonumber(sub(template, 1, 8), 16);
+  var n, rs = 1, 26;
 
-  -- Process each character.
-  for p in gmatch(sub(template, 9), ".") do
-    if p == "R" then
-      rs = rs - 5; op = op + shl(parse_gpr(params[n]), rs); n = n + 1
-    elseif p == "F" then
-      rs = rs - 5; op = op + shl(parse_fpr(params[n]), rs); n = n + 1
-    elseif p == "V" then
-      rs = rs - 5; op = op + shl(parse_vr(params[n]), rs); n = n + 1
-    elseif p == "Q" then
-      local vs = parse_vs(params[n]); n = n + 1; rs = rs - 5
-      local sh = rs == 6 and 2 or 3 + band(shr(rs, 1), 3)
-      op = op + shl(band(vs, 31), rs) + shr(band(vs, 32), sh)
-    elseif p == "q" then
-      local vs = parse_vs(params[n]); n = n + 1
-      op = op + shl(band(vs, 31), 21) + shr(band(vs, 32), 5)
-    elseif p == "A" then
-      rs = rs - 5; op = op + parse_imm(params[n], 5, rs, 0, false); n = n + 1
-    elseif p == "S" then
-      rs = rs - 5; op = op + parse_imm(params[n], 5, rs, 0, true); n = n + 1
-    elseif p == "I" then
-      op = op + parse_imm(params[n], 16, 0, 0, true); n = n + 1
-    elseif p == "U" then
-      op = op + parse_imm(params[n], 16, 0, 0, false); n = n + 1
-    elseif p == "D" then
-      op = op + parse_disp(params[n]); n = n + 1
-    elseif p == "2" then
-      op = op + parse_u5disp(params[n], 1); n = n + 1
-    elseif p == "4" then
-      op = op + parse_u5disp(params[n], 2); n = n + 1
-    elseif p == "8" then
-      op = op + parse_u5disp(params[n], 3); n = n + 1
-    elseif p == "C" then
-      rs = rs - 5; op = op + shl(parse_cond(params[n]), rs); n = n + 1
-    elseif p == "X" then
-      rs = rs - 5; op = op + shl(parse_cr(params[n]), rs+2); n = n + 1
-    elseif p == "1" then
-      rs = rs - 5; op = op + parse_imm(params[n], 1, rs, 0, false); n = n + 1
-    elseif p == "g" then
-      rs = rs - 5; op = op + parse_imm(params[n], 2, rs, 0, false); n = n + 1
-    elseif p == "3" then
-      rs = rs - 5; op = op + parse_imm(params[n], 3, rs, 0, false); n = n + 1
-    elseif p == "P" then
-      rs = rs - 5; op = op + parse_imm(params[n], 4, rs, 0, false); n = n + 1
-    elseif p == "p" then
-      op = op + parse_imm(params[n], 4, rs, 0, false); n = n + 1
-    elseif p == "6" then
-      rs = rs - 6; op = op + parse_imm(params[n], 6, rs, 0, false); n = n + 1
-    elseif p == "Y" then
-      rs = rs - 5; op = op + parse_imm(params[n], 1, rs+4, 0, false); n = n + 1
-    elseif p == "y" then
-      rs = rs - 5; op = op + parse_imm(params[n], 1, rs+3, 0, false); n = n + 1
-    elseif p == "Z" then
-      rs = rs - 5; op = op + parse_imm(params[n], 2, rs+3, 0, false); n = n + 1
-    elseif p == "z" then
-      rs = rs - 5; op = op + parse_imm(params[n], 2, rs+2, 0, false); n = n + 1
-    elseif p == "W" then
-      op = op + parse_cr(params[n]); n = n + 1
-    elseif p == "G" then
-      op = op + parse_imm(params[n], 8, 12, 0, false); n = n + 1
-    elseif p == "H" then
-      op = op + parse_shiftmask(params[n], true); n = n + 1
-    elseif p == "M" then
-      op = op + parse_shiftmask(params[n], false); n = n + 1
-    elseif p == "J" or p == "K" then
-      local mode, n, s = parse_label(params[n], false)
-      if p == "K" then n = n + 2048 end
-      waction("REL_"..mode, n, s, 1)
-      n = n + 1
-    elseif p == "0" then
-      if band(shr(op, rs), 31) == 0 then werror("cannot use r0") end
-    elseif p == "=" or p == "%" then
-      local t = band(shr(op, p == "%" and rs+5 or rs), 31)
-      rs = rs - 5
-      op = op + shl(t, rs)
-    elseif p == "~" then
-      local mm = shl(31, rs)
-      local lo = band(op, mm)
-      local hi = band(op, shl(mm, 5))
-      op = op - lo - hi + shl(lo, 5) + shr(hi, 5)
-    elseif p == ":" then
-      if band(shr(op, rs), 1) ~= 0 then werror("register pair expected") end
-    elseif p == "-" then
-      rs = rs - 5
-    elseif p == "." then
-      -- Ignored.
-    else
-      assert(false)
-    end
-  end
-  wputpos(pos, op)
-end
+  // Limit number of section buffer positions used by a single dasm_put().
+  // A single opcode needs a maximum of 3 positions (rlwinm).
+  if( secpos+3 > maxsecpos ) { wflush(); }
+  var pos = wpos();
 
-map_op[".template__"] = op_template
+  // Process each character.
+  for( p in gmatch(sub(template, 9), ".") ) {
+    if( p == "R" ) {
+      rs -=   5; op +=   shl(parse_gpr(params[n]), rs); n +=   1;
+    } else if( p == "F" ) {
+      rs -=   5; op +=   shl(parse_fpr(params[n]), rs); n +=   1;
+    } else if( p == "V" ) {
+      rs -=   5; op +=   shl(parse_vr(params[n]), rs); n +=   1;
+    } else if( p == "Q" ) {
+      var vs = parse_vs(params[n]); n +=   1; rs -=   5;
+      var sh = rs == 6 && 2 || 3 + band(shr(rs, 1), 3);
+      op +=   shl(band(vs, 31), rs) + shr(band(vs, 32), sh);
+    } else if( p == "q" ) {
+      var vs = parse_vs(params[n]); n +=   1;
+      op +=   shl(band(vs, 31), 21) + shr(band(vs, 32), 5);
+    } else if( p == "A" ) {
+      rs -=   5; op +=   parse_imm(params[n], 5, rs, 0, false); n +=   1;
+    } else if( p == "S" ) {
+      rs -=   5; op +=   parse_imm(params[n], 5, rs, 0, true); n +=   1;
+    } else if( p == "I" ) {
+      op +=   parse_imm(params[n], 16, 0, 0, true); n +=   1;
+    } else if( p == "U" ) {
+      op +=   parse_imm(params[n], 16, 0, 0, false); n +=   1;
+    } else if( p == "D" ) {
+      op +=   parse_disp(params[n]); n +=   1;
+    } else if( p == "2" ) {
+      op +=   parse_u5disp(params[n], 1); n +=   1;
+    } else if( p == "4" ) {
+      op +=   parse_u5disp(params[n], 2); n +=   1;
+    } else if( p == "8" ) {
+      op +=   parse_u5disp(params[n], 3); n +=   1;
+    } else if( p == "C" ) {
+      rs -=   5; op +=   shl(parse_cond(params[n]), rs); n +=   1;
+    } else if( p == "X" ) {
+      rs -=   5; op +=   shl(parse_cr(params[n]), rs+2); n +=   1;
+    } else if( p == "1" ) {
+      rs -=   5; op +=   parse_imm(params[n], 1, rs, 0, false); n +=   1;
+    } else if( p == "g" ) {
+      rs -=   5; op +=   parse_imm(params[n], 2, rs, 0, false); n +=   1;
+    } else if( p == "3" ) {
+      rs -=   5; op +=   parse_imm(params[n], 3, rs, 0, false); n +=   1;
+    } else if( p == "P" ) {
+      rs -=   5; op +=   parse_imm(params[n], 4, rs, 0, false); n +=   1;
+    } else if( p == "p" ) {
+      op +=   parse_imm(params[n], 4, rs, 0, false); n +=   1;
+    } else if( p == "6" ) {
+      rs -=   6; op +=   parse_imm(params[n], 6, rs, 0, false); n +=   1;
+    } else if( p == "Y" ) {
+      rs -=   5; op +=   parse_imm(params[n], 1, rs+4, 0, false); n +=   1;
+    } else if( p == "y" ) {
+      rs -=   5; op +=   parse_imm(params[n], 1, rs+3, 0, false); n +=   1;
+    } else if( p == "Z" ) {
+      rs -=   5; op +=   parse_imm(params[n], 2, rs+3, 0, false); n +=   1;
+    } else if( p == "z" ) {
+      rs -=   5; op +=   parse_imm(params[n], 2, rs+2, 0, false); n +=   1;
+    } else if( p == "W" ) {
+      op +=   parse_cr(params[n]); n +=   1;
+    } else if( p == "G" ) {
+      op +=   parse_imm(params[n], 8, 12, 0, false); n +=   1;
+    } else if( p == "H" ) {
+      op +=   parse_shiftmask(params[n], true); n +=   1;
+    } else if( p == "M" ) {
+      op +=   parse_shiftmask(params[n], false); n +=   1;
+    } else if( p == "J" || p == "K" ) {
+      var mode, n, s = parse_label(params[n], false);
+      if( p == "K" ) { n +=   2048; }
+      waction("REL_"..mode, n, s, 1);
+      n +=   1;
+    } else if( p == "0" ) {
+      if( band(shr(op, rs), 31) == 0 ) { werror("cannot use r0"); }
+    } else if( p == "=" || p == "%" ) {
+      var t = band(shr(op, p == "%" && rs+5 || rs), 31);
+      rs -=   5;
+      op +=   shl(t, rs);
+    } else if( p == "~" ) {
+      var mm = shl(31, rs);
+      var lo = band(op, mm);
+      var hi = band(op, shl(mm, 5));
+      op -=   lo - hi + shl(lo, 5) + shr(hi, 5);
+    } else if( p == ":" ) {
+      if( band(shr(op, rs), 1) != 0 ) { werror("register pair expected"); }
+    } else if( p == "-" ) {
+      rs -=   5;
+    } else if( p == "." ) {
+      // Ignored.
+    } else {
+      assert(false);
+    }
+  }
+  wputpos(pos, op);
+};
 
-------------------------------------------------------------------------------
+map_op[".template__"] = op_template;
 
--- Pseudo-opcode to mark the position where the action list is to be emitted.
-map_op[".actionlist_1"] = function(params)
-  if not params then return "cvar" end
-  local name = params[1] -- No syntax check. You get to keep the pieces.
-  wline(function(out) writeactions(out, name) end)
-end
+//----------------------------------------------------------------------------
 
--- Pseudo-opcode to mark the position where the global enum is to be emitted.
-map_op[".globals_1"] = function(params)
-  if not params then return "prefix" end
-  local prefix = params[1] -- No syntax check. You get to keep the pieces.
-  wline(function(out) writeglobals(out, prefix) end)
-end
+// Pseudo-opcode to mark the position where the action list is to be emitted.
+map_op[".actionlist_1"] = function(params) {
+  if( ! params ) { return "cvar"; }
+  var name = params[1]; // No syntax check. You get to keep the pieces.
+  wline(function(out) { writeactions(out, name); });
+};
 
--- Pseudo-opcode to mark the position where the global names are to be emitted.
-map_op[".globalnames_1"] = function(params)
-  if not params then return "cvar" end
-  local name = params[1] -- No syntax check. You get to keep the pieces.
-  wline(function(out) writeglobalnames(out, name) end)
-end
+// Pseudo-opcode to mark the position where the global enum is to be emitted.
+map_op[".globals_1"] = function(params) {
+  if( ! params ) { return "prefix"; }
+  var prefix = params[1]; // No syntax check. You get to keep the pieces.
+  wline(function(out) { writeglobals(out, prefix); });
+};
 
--- Pseudo-opcode to mark the position where the extern names are to be emitted.
-map_op[".externnames_1"] = function(params)
-  if not params then return "cvar" end
-  local name = params[1] -- No syntax check. You get to keep the pieces.
-  wline(function(out) writeexternnames(out, name) end)
-end
+// Pseudo-opcode to mark the position where the global names are to be emitted.
+map_op[".globalnames_1"] = function(params) {
+  if( ! params ) { return "cvar"; }
+  var name = params[1]; // No syntax check. You get to keep the pieces.
+  wline(function(out) { writeglobalnames(out, name); });
+};
 
-------------------------------------------------------------------------------
+// Pseudo-opcode to mark the position where the extern names are to be emitted.
+map_op[".externnames_1"] = function(params) {
+  if( ! params ) { return "cvar"; }
+  var name = params[1]; // No syntax check. You get to keep the pieces.
+  wline(function(out) { writeexternnames(out, name); });
+};
 
--- Label pseudo-opcode (converted from trailing colon form).
-map_op[".label_1"] = function(params)
-  if not params then return "[1-9] | ->global | =>pcexpr" end
-  if secpos+1 > maxsecpos then wflush() end
-  local mode, n, s = parse_label(params[1], true)
-  if mode == "EXT" then werror("bad label definition") end
-  waction("LABEL_"..mode, n, s, 1)
-end
+//----------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
+// Label pseudo-opcode (converted from trailing colon form).
+map_op[".label_1"] = function(params) {
+  if( ! params ) { return "[1-9] | ->global | =>pcexpr"; }
+  if( secpos+1 > maxsecpos ) { wflush(); }
+  var mode, n, s = parse_label(params[1], true);
+  if( mode == "EXT" ) { werror("bad label definition"); }
+  waction("LABEL_"..mode, n, s, 1);
+};
 
--- Pseudo-opcodes for data storage.
-map_op[".long_*"] = function(params)
-  if not params then return "imm..." end
-  for _,p in ipairs(params) do
-    local n = tonumber(p)
-    if not n then werror("bad immediate `"..p.."'") end
-    if n < 0 then n = n + 2^32 end
-    wputw(n)
-    if secpos+2 > maxsecpos then wflush() end
-  end
-end
+//----------------------------------------------------------------------------
 
--- Alignment pseudo-opcode.
-map_op[".align_1"] = function(params)
-  if not params then return "numpow2" end
-  if secpos+1 > maxsecpos then wflush() end
-  local align = tonumber(params[1])
-  if align then
-    local x = align
-    -- Must be a power of 2 in the range (2 ... 256).
-    for i=1,8 do
-      x = x / 2
-      if x == 1 then
-	waction("ALIGN", align-1, nil, 1) -- Action byte is 2**n-1.
-	return
-      end
-    end
-  end
-  werror("bad alignment")
-end
+// Pseudo-opcodes for data storage.
+map_op[".long_*"] = function(params) {
+  if( ! params ) { return "imm..."; }
+  for( _,p in ipairs(params) ) {
+    var n = tonumber(p);
+    if( ! n ) { werror("bad immediate `"..p.."'"); }
+    if( n < 0 ) { n +=   2**32; }
+    wputw(n);
+    if( secpos+2 > maxsecpos ) { wflush(); }
+  }
+};
 
-------------------------------------------------------------------------------
+// Alignment pseudo-opcode.
+map_op[".align_1"] = function(params) {
+  if( ! params ) { return "numpow2"; }
+  if( secpos+1 > maxsecpos ) { wflush(); }
+  var align = tonumber(params[1]);
+  if( align ) {
+    var x = align;
+    // Must be a power of 2 in the range (2 ... 256).
+    for( i=1,8 ) {
+      x = x / 2;
+      if( x == 1 ) {
+	waction("ALIGN", align-1, null, 1); // Action byte is 2**n-1.
+	return;
+      }
+    }
+  }
+  werror("bad alignment");
+};
 
--- Pseudo-opcode for (primitive) type definitions (map to C types).
-map_op[".type_3"] = function(params, nparams)
-  if not params then
-    return nparams == 2 and "name, ctype" or "name, ctype, reg"
-  end
-  local name, ctype, reg = params[1], params[2], params[3]
-  if not match(name, "^[%a_][%w_]*$") then
-    werror("bad type name `"..name.."'")
-  end
-  local tp = map_type[name]
-  if tp then
-    werror("duplicate type `"..name.."'")
-  end
-  -- Add #type to defines. A bit unclean to put it in map_archdef.
-  map_archdef["#"..name] = "sizeof("..ctype..")"
-  -- Add new type and emit shortcut define.
-  local num = ctypenum + 1
+//----------------------------------------------------------------------------
+
+// Pseudo-opcode for (primitive) type definitions (map to C types).
+map_op[".type_3"] = function(params, nparams) {
+  if( ! params ) {
+    return nparams == 2 && "name, ctype" || "name, ctype, reg";
+  }
+  var name, ctype, reg = params[1], params[2], params[3];
+  if( ! match(name, "^[%a_][%w_]*$") ) {
+    werror("bad type name `"..name.."'");
+  }
+  var tp = map_type[name];
+  if( tp ) {
+    werror("duplicate type `"..name.."'");
+  }
+  // Add #type to defines. A bit unclean to put it in map_archdef.
+  map_archdef["#"..name] = "sizeof("..ctype..")";
+  // Add new type and emit shortcut define.
+  var num = ctypenum + 1;
   map_type[name] = {
     ctype = ctype,
     ctypefmt = format("Dt%X(%%s)", num),
     reg = reg,
+  };
+  wline(format("#define Dt%X(_V) (int)(ptrdiff_t)&(((%s *)0)_V)", num, ctype));
+  ctypenum = num;
+};
+map_op[".type_2"] = map_op[".type_3"];
+
+// Dump type definitions.
+var function dumptypes(out, lvl) {
+  var t = {};
+  for( name in pairs(map_type) ) { t[#t+1] = name; }
+  sort(t);
+  out->write("Type definitions:\n");
+  for( _,name in ipairs(t) ) {
+    var tp = map_type[name];
+    var reg = tp.reg || "";
+    out->write(format("  %-20s %-20s %s\n", name, tp.ctype, reg));
   }
-  wline(format("#define Dt%X(_V) (int)(ptrdiff_t)&(((%s *)0)_V)", num, ctype))
-  ctypenum = num
-end
-map_op[".type_2"] = map_op[".type_3"]
+  out->write("\n");
+}
 
--- Dump type definitions.
-local function dumptypes(out, lvl)
-  local t = {}
-  for name in pairs(map_type) do t[#t+1] = name end
-  sort(t)
-  out:write("Type definitions:\n")
-  for _,name in ipairs(t) do
-    local tp = map_type[name]
-    local reg = tp.reg or ""
-    out:write(format("  %-20s %-20s %s\n", name, tp.ctype, reg))
-  end
-  out:write("\n")
-end
+//----------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
+// Set the current section.
+function _M.section(num) {
+  waction("SECTION", num);
+  wflush(true); // SECTION is a terminal action.
+}
 
--- Set the current section.
-function _M.section(num)
-  waction("SECTION", num)
-  wflush(true) -- SECTION is a terminal action.
-end
+//----------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
+// Dump architecture description.
+function _M.dumparch(out) {
+  out->write(format("DynASM %s version %s, released %s\n\n",
+    _info.arch, _info.version, _info.release));
+  dumpactions(out);
+}
 
--- Dump architecture description.
-function _M.dumparch(out)
-  out:write(format("DynASM %s version %s, released %s\n\n",
-    _info.arch, _info.version, _info.release))
-  dumpactions(out)
-end
+// Dump all user defined elements.
+function _M.dumpdef(out, lvl) {
+  dumptypes(out, lvl);
+  dumpglobals(out, lvl);
+  dumpexterns(out, lvl);
+}
 
--- Dump all user defined elements.
-function _M.dumpdef(out, lvl)
-  dumptypes(out, lvl)
-  dumpglobals(out, lvl)
-  dumpexterns(out, lvl)
-end
+//----------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
+// Pass callbacks from/to the DynASM core.
+function _M.passcb(wl, we, wf, ww) {
+  wline, werror, wfatal, wwarn = wl, we, wf, ww;
+  return wflush;
+}
 
--- Pass callbacks from/to the DynASM core.
-function _M.passcb(wl, we, wf, ww)
-  wline, werror, wfatal, wwarn = wl, we, wf, ww
-  return wflush
-end
+// Setup the arch-specific module.
+function _M.setup(arch, opt) {
+  g_arch, g_opt = arch, opt;
+}
 
--- Setup the arch-specific module.
-function _M.setup(arch, opt)
-  g_arch, g_opt = arch, opt
-end
+// Merge the core maps and the arch-specific maps.
+function _M.mergemaps(map_coreop, map_def) {
+  setmetatable(map_op, { __index = map_coreop });
+  setmetatable(map_def, { __index = map_archdef });
+  return map_op, map_def;
+}
 
--- Merge the core maps and the arch-specific maps.
-function _M.mergemaps(map_coreop, map_def)
-  setmetatable(map_op, { __index = map_coreop })
-  setmetatable(map_def, { __index = map_archdef })
-  return map_op, map_def
-end
+return _M;
 
-return _M
-
-------------------------------------------------------------------------------
+//----------------------------------------------------------------------------
 

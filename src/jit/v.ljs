@@ -58,81 +58,81 @@
 //----------------------------------------------------------------------------
 
 // Cache some library functions and objects.
-var jit = require("jit")
-assert(jit.version_num == 20100, "LuaJIT core/library version mismatch")
-var jutil = require("jit.util")
-var vmdef = require("jit.vmdef")
-var funcinfo, traceinfo = jutil.funcinfo, jutil.traceinfo
-var type, format = type, string.format
-var stdout, stderr = io.stdout, io.stderr
+var jit = require("jit");
+assert(jit.version_num == 20100, "LuaJIT core/library version mismatch");
+var jutil = require("jit.util");
+var vmdef = require("jit.vmdef");
+var funcinfo, traceinfo = jutil.funcinfo, jutil.traceinfo;
+var type, format = type, string.format;
+var stdout, stderr = io.stdout, io.stderr;
 
 // Active flag and output file handle.
-var active, out
+var active, out;
 
 //----------------------------------------------------------------------------
 
-var startloc, startex
+var startloc, startex;
 
 var function fmtfunc(func, pc) {
-  var fi = funcinfo(func, pc)
+  var fi = funcinfo(func, pc);
   if( fi.loc ) {
-    return fi.loc
+    return fi.loc;
   } else if( fi.ffid ) {
-    return vmdef.ffnames[fi.ffid]
+    return vmdef.ffnames[fi.ffid];
   } else if( fi.addr ) {
-    return format("C:%x", fi.addr)
+    return format("C:%x", fi.addr);
   } else {
-    return "(?)"
+    return "(?)";
   }
 }
 
 // Format trace error message.
 var function fmterr(err, info) {
   if( type(err) == "number" ) {
-    if( type(info) == "function" ) { info = fmtfunc(info) }
-    err = format(vmdef.traceerr[err], info)
+    if( type(info) == "function" ) { info = fmtfunc(info); }
+    err = format(vmdef.traceerr[err], info);
   }
-  return err
+  return err;
 }
 
 // Dump trace states.
 var function dump_trace(what, tr, func, pc, otr, oex) {
   if( what == "start" ) {
-    startloc = fmtfunc(func, pc)
-    startex = otr && "("..otr.."/"..(oex == -1 && "stitch" || oex)..") " || ""
+    startloc = fmtfunc(func, pc);
+    startex = otr && "("..otr.."/"..(oex == -1 && "stitch" || oex)..") " || "";
   } else {
     if( what == "abort" ) {
-      var loc = fmtfunc(func, pc)
+      var loc = fmtfunc(func, pc);
       if( loc != startloc ) {
 	out->write(format("[TRACE --- %s%s -- %s at %s]\n",
-	  startex, startloc, fmterr(otr, oex), loc))
+	  startex, startloc, fmterr(otr, oex), loc));
       } else {
 	out->write(format("[TRACE --- %s%s -- %s]\n",
-	  startex, startloc, fmterr(otr, oex)))
+	  startex, startloc, fmterr(otr, oex)));
       }
     } else if( what == "stop" ) {
-      var info = traceinfo(tr)
-      var link, ltype = info.link, info.linktype
+      var info = traceinfo(tr);
+      var link, ltype = info.link, info.linktype;
       if( ltype == "interpreter" ) {
 	out->write(format("[TRACE %3s %s%s -- fallback to interpreter]\n",
-	  tr, startex, startloc))
+	  tr, startex, startloc));
       } else if( ltype == "stitch" ) {
 	out->write(format("[TRACE %3s %s%s %s %s]\n",
-	  tr, startex, startloc, ltype, fmtfunc(func, pc)))
+	  tr, startex, startloc, ltype, fmtfunc(func, pc)));
       } else if( link == tr || link == 0 ) {
 	out->write(format("[TRACE %3s %s%s %s]\n",
-	  tr, startex, startloc, ltype))
+	  tr, startex, startloc, ltype));
       } else if( ltype == "root" ) {
 	out->write(format("[TRACE %3s %s%s -> %d]\n",
-	  tr, startex, startloc, link))
+	  tr, startex, startloc, link));
       } else {
 	out->write(format("[TRACE %3s %s%s -> %d %s]\n",
-	  tr, startex, startloc, link, ltype))
+	  tr, startex, startloc, link, ltype));
       }
     } else {
-      out->write(format("[TRACE %s]\n", what))
+      out->write(format("[TRACE %s]\n", what));
     }
-    out->flush()
+    out->flush();
   }
 }
 
@@ -141,24 +141,24 @@ var function dump_trace(what, tr, func, pc, otr, oex) {
 // Detach dump handlers.
 var function dumpoff() {
   if( active ) {
-    active = false
-    jit.attach(dump_trace)
-    if( out && out != stdout && out != stderr ) { out->close() }
-    out = null
+    active = false;
+    jit.attach(dump_trace);
+    if( out && out != stdout && out != stderr ) { out->close(); }
+    out = null;
   }
 }
 
 // Open the output file and attach dump handlers.
 var function dumpon(outfile) {
-  if( active ) { dumpoff() }
-  if( ! outfile ) { outfile = os.getenv("LUAJIT_VERBOSEFILE") }
+  if( active ) { dumpoff(); }
+  if( ! outfile ) { outfile = os.getenv("LUAJIT_VERBOSEFILE"); }
   if( outfile ) {
-    out = outfile == "-" && stdout || assert(io.open(outfile, "w"))
+    out = outfile == "-" && stdout || assert(io.open(outfile, "w"));
   } else {
-    out = stderr
+    out = stderr;
   }
-  jit.attach(dump_trace, "trace")
-  active = true
+  jit.attach(dump_trace, "trace");
+  active = true;
 }
 
 // Public module functions.
@@ -166,5 +166,5 @@ return {
   on = dumpon,
   off = dumpoff,
   start = dumpon // For -j command line option.
-}
+};
 

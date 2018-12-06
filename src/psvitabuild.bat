@@ -13,22 +13,22 @@
 @set LJLINK=link /nologo
 @set LJMT=mt /nologo
 @set DASMDIR=..\dynasm
-@set DASM=%DASMDIR%\dynasm.lua
+@set DASM=%DASMDIR%\dynasm.ljs
 @set ALL_LIB=lib_base.c lib_math.c lib_bit.c lib_string.c lib_table.c lib_io.c lib_os.c lib_package.c lib_debug.c lib_jit.c lib_ffi.c
 
-%LJCOMPILE% host\minilua.c
+%LJCOMPILE% host\miniljs.c
 @if errorlevel 1 goto :BAD
-%LJLINK% /out:minilua.exe minilua.obj
+%LJLINK% /out:miniljs.exe miniljs.obj
 @if errorlevel 1 goto :BAD
-if exist minilua.exe.manifest^
-  %LJMT% -manifest minilua.exe.manifest -outputresource:minilua.exe
+if exist miniljs.exe.manifest^
+  %LJMT% -manifest miniljs.exe.manifest -outputresource:miniljs.exe
 
 @rem Check for 32 bit host compiler.
-@minilua
+@miniljs
 @if errorlevel 8 goto :FAIL
 
 @set DASMFLAGS=-D FPU -D HFABI
-minilua %DASM% -LN %DASMFLAGS% -o host\buildvm_arch.h vm_arm.dasc
+miniljs %DASM% -LN %DASMFLAGS% -o host\buildvm_arch.h vm_arm.dasc
 @if errorlevel 1 goto :BAD
 
 %LJCOMPILE% /I "." /I %DASMDIR% -DLUAJIT_TARGET=LUAJIT_ARCH_ARM -DLUAJIT_OS=LUAJIT_OS_OTHER -DLUAJIT_DISABLE_JIT -DLUAJIT_DISABLE_FFI -DLJ_TARGET_PSVITA=1 host\buildvm*.c
@@ -48,7 +48,7 @@ buildvm -m libdef -o lj_libdef.h %ALL_LIB%
 @if errorlevel 1 goto :BAD
 buildvm -m recdef -o lj_recdef.h %ALL_LIB%
 @if errorlevel 1 goto :BAD
-buildvm -m vmdef -o jit\vmdef.lua %ALL_LIB%
+buildvm -m vmdef -o jit\vmdef.ljs %ALL_LIB%
 @if errorlevel 1 goto :BAD
 buildvm -m folddef -o lj_folddef.h lj_opt_fold.c
 @if errorlevel 1 goto :BAD
@@ -76,7 +76,7 @@ del %TARGETLIB%
 %LJLIB%%TARGETLIB% ljamalg.o lj_vm.o
 @if errorlevel 1 goto :BAD
 
-@del *.o *.obj *.manifest minilua.exe buildvm.exe
+@del *.o *.obj *.manifest miniljs.exe buildvm.exe
 @echo.
 @echo === Successfully built LuaJIT for PS Vita ===
 

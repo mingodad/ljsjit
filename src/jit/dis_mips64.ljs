@@ -8,10 +8,10 @@
 // MIPS disassembler module. All the interesting stuff is there.
 //----------------------------------------------------------------------------
 
-var dis_mips = require((string.match(..., ".*%.") || "").."dis_mips")
+var dis_mips = require((string.match(..., ".*%.") || "").."dis_mips");
 return {
   create = dis_mips.create,
   disass = dis_mips.disass,
   regname = dis_mips.regname
-}
+};
 

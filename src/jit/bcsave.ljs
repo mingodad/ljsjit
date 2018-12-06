@@ -10,12 +10,12 @@
 //
 //----------------------------------------------------------------------------
 
-var jit = require("jit")
-assert(jit.version_num == 20100, "LuaJIT core/library version mismatch")
-var bit = require("bit")
+var jit = require("jit");
+assert(jit.version_num == 20100, "LuaJIT core/library version mismatch");
+var bit = require("bit");
 
 // Symbol name prefix for LuaJIT bytecode.
-var LJBC_PREFIX = "luaJIT_BC_"
+var LJBC_PREFIX = "luaJIT_BC_";
 
 //----------------------------------------------------------------------------
 
@@ -34,89 +34,89 @@ Save LuaJIT bytecode: luajit -b[options] input output
   -         Use stdin as input and/or stdout as output.
 
 File types: c h obj o raw (default)
-]=])
-  os.exit(1)
+]=]);
+  os.exit(1);
 }
 
 var function check(ok, ...) {
-  if( ok ) { return ok, ... }
-  io.stderr->write("luajit: ", ...)
-  io.stderr->write("\n")
-  os.exit(1)
+  if( ok ) { return ok, ...; }
+  io.stderr->write("luajit: ", ...);
+  io.stderr->write("\n");
+  os.exit(1);
 }
 
 var function readfile(input) {
-  if( type(input) == "function" ) { return input }
-  if( input == "-" ) { input = null }
-  return check(loadfile(input))
+  if( type(input) == "function" ) { return input; }
+  if( input == "-" ) { input = null; }
+  return check(loadfile(input));
 }
 
 var function savefile(name, mode) {
-  if( name == "-" ) { return io.stdout }
-  return check(io.open(name, mode))
+  if( name == "-" ) { return io.stdout; }
+  return check(io.open(name, mode));
 }
 
 //----------------------------------------------------------------------------
 
 var map_type = {
   raw = "raw", c = "c", h = "h", o = "obj", obj = "obj",
-}
+};
 
 var map_arch = {
   x86 = true, x64 = true, arm = true, arm64 = true, arm64be = true,
   ppc = true, mips = true, mipsel = true,
-}
+};
 
 var map_os = {
   linux = true, windows = true, osx = true, freebsd = true, netbsd = true,
   openbsd = true, dragonfly = true, solaris = true,
-}
+};
 
 var function checkarg(str, map, err) {
-  str = string.lower(str)
-  var s = check(map[str], "unknown ", err)
-  return s == true && str || s
+  str = string.lower(str);
+  var s = check(map[str], "unknown ", err);
+  return s == true && str || s;
 }
 
 var function detecttype(str) {
-  var ext = string.match(string.lower(str), "%.(%a+)$")
-  return map_type[ext] || "raw"
+  var ext = string.match(string.lower(str), "%.(%a+)$");
+  return map_type[ext] || "raw";
 }
 
 var function checkmodname(str) {
-  check(string.match(str, "^[%w_.%-]+$"), "bad module name")
-  return string.gsub(str, "[%.%-]", "_")
+  check(string.match(str, "^[%w_.%-]+$"), "bad module name");
+  return string.gsub(str, "[%.%-]", "_");
 }
 
 var function detectmodname(str) {
   if( type(str) == "string" ) {
-    var tail = string.match(str, "[^/\\]+$")
-    if( tail ) { str = tail }
-    var head = string.match(str, "^(.*)%.[^.]*$")
-    if( head ) { str = head }
-    str = string.match(str, "^[%w_.%-]+")
+    var tail = string.match(str, "[^/\\]+$");
+    if( tail ) { str = tail; }
+    var head = string.match(str, "^(.*)%.[^.]*$");
+    if( head ) { str = head; }
+    str = string.match(str, "^[%w_.%-]+");
   } else {
-    str = null
+    str = null;
   }
-  check(str, "cannot derive module name, use -n name")
-  return string.gsub(str, "[%.%-]", "_")
+  check(str, "cannot derive module name, use -n name");
+  return string.gsub(str, "[%.%-]", "_");
 }
 
 //----------------------------------------------------------------------------
 
 var function bcsave_tail(fp, output, s) {
-  var ok, err = fp->write(s)
-  if( ok && output != "-" ) { ok, err = fp->close() }
-  check(ok, "cannot write ", output, ": ", err)
+  var ok, err = fp->write(s);
+  if( ok && output != "-" ) { ok, err = fp->close(); }
+  check(ok, "cannot write ", output, ": ", err);
 }
 
 var function bcsave_raw(output, s) {
-  var fp = savefile(output, "wb")
-  bcsave_tail(fp, output, s)
+  var fp = savefile(output, "wb");
+  bcsave_tail(fp, output, s);
 }
 
 var function bcsave_c(ctx, output, s) {
-  var fp = savefile(output, "w")
+  var fp = savefile(output, "w");
   if( ctx.type == "c" ) {
     fp->write(string.format([=[
 #ifdef _cplusplus
@@ -126,25 +126,25 @@ extern "C"
 __declspec(dllexport)
 #endif
 const unsigned char %s%s[] = {
-]=], LJBC_PREFIX, ctx.modname))
+]=], LJBC_PREFIX, ctx.modname));
   } else {
     fp->write(string.format([=[
 #define %s%s_SIZE %d
 static const unsigned char %s%s[] = {
-]=], LJBC_PREFIX, ctx.modname, #s, LJBC_PREFIX, ctx.modname))
+]=], LJBC_PREFIX, ctx.modname, #s, LJBC_PREFIX, ctx.modname));
   }
-  var t, n, m = {}, 0, 0
+  var t, n, m = {}, 0, 0;
   for( i=1,#s ) {
-    var b = tostring(string.byte(s, i))
-    m = m + #b + 1
+    var b = tostring(string.byte(s, i));
+    m +=   #b + 1;
     if( m > 78 ) {
-      fp->write(table.concat(t, ",", 1, n), ",\n")
-      n, m = 0, #b + 1
+      fp->write(table.concat(t, ",", 1, n), ",\n");
+      n, m = 0, #b + 1;
     }
-    n = n + 1
-    t[n] = b
+    n +=   1;
+    t[n] = b;
   }
-  bcsave_tail(fp, output, table.concat(t, ",", 1, n).."\n};\n")
+  bcsave_tail(fp, output, table.concat(t, ",", 1, n).."\n};\n");
 }
 
 var function bcsave_elfobj(ctx, output, s, ffi) {
@@ -197,98 +197,98 @@ typedef struct {
   ELF64symbol sym[2];
   uint8_t space[4096];
 } ELF64obj;
-]=])
-  var symname = LJBC_PREFIX..ctx.modname
-  var is64, isbe = false, false
+]=]);
+  var symname = LJBC_PREFIX..ctx.modname;
+  var is64, isbe = false, false;
   if( ctx.arch == "x64" || ctx.arch == "arm64" || ctx.arch == "arm64be" ) {
-    is64 = true
+    is64 = true;
   } else if( ctx.arch == "ppc" || ctx.arch == "mips" ) {
-    isbe = true
+    isbe = true;
   }
 
   // Handle different host/target endianess.
-  var function f32(x) { return x }
-  var f16, fofs = f32, f32
+  var function f32(x) { return x; }
+  var f16, fofs = f32, f32;
   if( ffi.abi("be") != isbe ) {
-    f32 = bit.bswap
-    function f16(x) { return bit.rshift(bit.bswap(x), 16) }
+    f32 = bit.bswap;
+    function f16(x) { return bit.rshift(bit.bswap(x), 16); }
     if( is64 ) {
-      var two32 = ffi.cast("int64_t", 2**32)
-      function fofs(x) { return bit.bswap(x)*two32 }
+      var two32 = ffi.cast("int64_t", 2**32);
+      function fofs(x) { return bit.bswap(x)*two32; }
     } else {
-      fofs = f32
+      fofs = f32;
     }
   }
 
   // Create ELF object and fill in header.
-  var o = ffi.new(is64 && "ELF64obj" || "ELF32obj")
-  var hdr = o.hdr
+  var o = ffi.new(is64 && "ELF64obj" || "ELF32obj");
+  var hdr = o.hdr;
   if( ctx.os == "bsd" || ctx.os == "other" ) { // Determine native hdr.eosabi.
-    var bf = assert(io.open("/bin/ls", "rb"))
-    var bs = bf->read(9)
-    bf->close()
-    ffi.copy(o, bs, 9)
-    check(hdr.emagic[0] == 127, "no support for writing native object files")
+    var bf = assert(io.open("/bin/ls", "rb"));
+    var bs = bf->read(9);
+    bf->close();
+    ffi.copy(o, bs, 9);
+    check(hdr.emagic[0] == 127, "no support for writing native object files");
   } else {
-    hdr.emagic = "\127ELF"
-    hdr.eosabi = ({ freebsd=9, netbsd=2, openbsd=12, solaris=6 })[ctx.os] || 0
+    hdr.emagic = "\127ELF";
+    hdr.eosabi = ({ freebsd=9, netbsd=2, openbsd=12, solaris=6 })[ctx.os] || 0;
   }
-  hdr.eclass = is64 && 2 || 1
-  hdr.eendian = isbe && 2 || 1
-  hdr.eversion = 1
-  hdr.type = f16(1)
-  hdr.machine = f16(({ x86=3, x64=62, arm=40, arm64=183, arm64be=183, ppc=20, mips=8, mipsel=8 })[ctx.arch])
+  hdr.eclass = is64 && 2 || 1;
+  hdr.eendian = isbe && 2 || 1;
+  hdr.eversion = 1;
+  hdr.type = f16(1);
+  hdr.machine = f16(({ x86=3, x64=62, arm=40, arm64=183, arm64be=183, ppc=20, mips=8, mipsel=8 })[ctx.arch]);
   if( ctx.arch == "mips" || ctx.arch == "mipsel" ) {
-    hdr.flags = f32(0x50001006)
+    hdr.flags = f32(0x50001006);
   }
-  hdr.version = f32(1)
-  hdr.shofs = fofs(ffi.offsetof(o, "sect"))
-  hdr.ehsize = f16(ffi.sizeof(hdr))
-  hdr.shentsize = f16(ffi.sizeof(o.sect[0]))
-  hdr.shnum = f16(6)
-  hdr.shstridx = f16(2)
+  hdr.version = f32(1);
+  hdr.shofs = fofs(ffi.offsetof(o, "sect"));
+  hdr.ehsize = f16(ffi.sizeof(hdr));
+  hdr.shentsize = f16(ffi.sizeof(o.sect[0]));
+  hdr.shnum = f16(6);
+  hdr.shstridx = f16(2);
 
   // Fill in sections and symbols.
-  var sofs, ofs = ffi.offsetof(o, "space"), 1
+  var sofs, ofs = ffi.offsetof(o, "space"), 1;
   for( i,name in ipairs({
       ".symtab", ".shstrtab", ".strtab", ".rodata", ".note.GNU-stack",
     }) ) {
-    var sect = o.sect[i]
-    sect.align = fofs(1)
-    sect.name = f32(ofs)
-    ffi.copy(o.space+ofs, name)
-    ofs = ofs + #name+1
+    var sect = o.sect[i];
+    sect.align = fofs(1);
+    sect.name = f32(ofs);
+    ffi.copy(o.space+ofs, name);
+    ofs +=   #name+1;
   }
-  o.sect[1].type = f32(2) // .symtab
-  o.sect[1].link = f32(3)
-  o.sect[1].info = f32(1)
-  o.sect[1].align = fofs(8)
-  o.sect[1].ofs = fofs(ffi.offsetof(o, "sym"))
-  o.sect[1].entsize = fofs(ffi.sizeof(o.sym[0]))
-  o.sect[1].size = fofs(ffi.sizeof(o.sym))
-  o.sym[1].name = f32(1)
-  o.sym[1].sectidx = f16(4)
-  o.sym[1].size = fofs(#s)
-  o.sym[1].info = 17
-  o.sect[2].type = f32(3) // .shstrtab
-  o.sect[2].ofs = fofs(sofs)
-  o.sect[2].size = fofs(ofs)
-  o.sect[3].type = f32(3) // .strtab
-  o.sect[3].ofs = fofs(sofs + ofs)
-  o.sect[3].size = fofs(#symname+2)
-  ffi.copy(o.space+ofs+1, symname)
-  ofs = ofs + #symname + 2
-  o.sect[4].type = f32(1) // .rodata
-  o.sect[4].flags = fofs(2)
-  o.sect[4].ofs = fofs(sofs + ofs)
-  o.sect[4].size = fofs(#s)
-  o.sect[5].type = f32(1) // .note.GNU-stack
-  o.sect[5].ofs = fofs(sofs + ofs + #s)
+  o.sect[1].type = f32(2); // .symtab
+  o.sect[1].link = f32(3);
+  o.sect[1].info = f32(1);
+  o.sect[1].align = fofs(8);
+  o.sect[1].ofs = fofs(ffi.offsetof(o, "sym"));
+  o.sect[1].entsize = fofs(ffi.sizeof(o.sym[0]));
+  o.sect[1].size = fofs(ffi.sizeof(o.sym));
+  o.sym[1].name = f32(1);
+  o.sym[1].sectidx = f16(4);
+  o.sym[1].size = fofs(#s);
+  o.sym[1].info = 17;
+  o.sect[2].type = f32(3); // .shstrtab
+  o.sect[2].ofs = fofs(sofs);
+  o.sect[2].size = fofs(ofs);
+  o.sect[3].type = f32(3); // .strtab
+  o.sect[3].ofs = fofs(sofs + ofs);
+  o.sect[3].size = fofs(#symname+2);
+  ffi.copy(o.space+ofs+1, symname);
+  ofs +=   #symname + 2;
+  o.sect[4].type = f32(1); // .rodata
+  o.sect[4].flags = fofs(2);
+  o.sect[4].ofs = fofs(sofs + ofs);
+  o.sect[4].size = fofs(#s);
+  o.sect[5].type = f32(1); // .note.GNU-stack
+  o.sect[5].ofs = fofs(sofs + ofs + #s);
 
   // Write ELF object file.
-  var fp = savefile(output, "wb")
-  fp->write(ffi.string(o, ffi.sizeof(o)-4096+ofs))
-  bcsave_tail(fp, output, s)
+  var fp = savefile(output, "wb");
+  fp->write(ffi.string(o, ffi.sizeof(o)-4096+ofs));
+  bcsave_tail(fp, output, s);
 }
 
 var function bcsave_peobj(ctx, output, s, ffi) {
@@ -334,68 +334,68 @@ typedef struct {
   uint32_t strtabsize;
   uint8_t space[4096];
 } PEobj;
-]=])
-  var symname = LJBC_PREFIX..ctx.modname
-  var is64 = false
+]=]);
+  var symname = LJBC_PREFIX..ctx.modname;
+  var is64 = false;
   if( ctx.arch == "x86" ) {
-    symname = "_"..symname
+    symname = "_"..symname;
   } else if( ctx.arch == "x64" ) {
-    is64 = true
+    is64 = true;
   }
-  var symexport = "   /EXPORT:"..symname..",DATA "
+  var symexport = "   /EXPORT:"..symname..",DATA ";
 
   // The file format is always little-endian. Swap if the host is big-endian.
-  var function f32(x) { return x }
-  var f16 = f32
+  var function f32(x) { return x; }
+  var f16 = f32;
   if( ffi.abi("be") ) {
-    f32 = bit.bswap
-    function f16(x) { return bit.rshift(bit.bswap(x), 16) }
+    f32 = bit.bswap;
+    function f16(x) { return bit.rshift(bit.bswap(x), 16); }
   }
 
   // Create PE object and fill in header.
-  var o = ffi.new("PEobj")
-  var hdr = o.hdr
-  hdr.arch = f16(({ x86=0x14c, x64=0x8664, arm=0x1c0, ppc=0x1f2, mips=0x366, mipsel=0x366 })[ctx.arch])
-  hdr.nsects = f16(2)
-  hdr.symtabofs = f32(ffi.offsetof(o, "sym0"))
-  hdr.nsyms = f32(6)
+  var o = ffi.new("PEobj");
+  var hdr = o.hdr;
+  hdr.arch = f16(({ x86=0x14c, x64=0x8664, arm=0x1c0, ppc=0x1f2, mips=0x366, mipsel=0x366 })[ctx.arch]);
+  hdr.nsects = f16(2);
+  hdr.symtabofs = f32(ffi.offsetof(o, "sym0"));
+  hdr.nsyms = f32(6);
 
   // Fill in sections and symbols.
-  o.sect[0].name = ".drectve"
-  o.sect[0].size = f32(#symexport)
-  o.sect[0].flags = f32(0x00100a00)
-  o.sym0.sect = f16(1)
-  o.sym0.scl = 3
-  o.sym0.name = ".drectve"
-  o.sym0.naux = 1
-  o.sym0aux.size = f32(#symexport)
-  o.sect[1].name = ".rdata"
-  o.sect[1].size = f32(#s)
-  o.sect[1].flags = f32(0x40300040)
-  o.sym1.sect = f16(2)
-  o.sym1.scl = 3
-  o.sym1.name = ".rdata"
-  o.sym1.naux = 1
-  o.sym1aux.size = f32(#s)
-  o.sym2.sect = f16(2)
-  o.sym2.scl = 2
-  o.sym2.nameref[1] = f32(4)
-  o.sym3.sect = f16(-1)
-  o.sym3.scl = 2
-  o.sym3.value = f32(1)
-  o.sym3.name = "@feat.00" // Mark as SafeSEH compliant.
-  ffi.copy(o.space, symname)
-  var ofs = #symname + 1
-  o.strtabsize = f32(ofs + 4)
-  o.sect[0].ofs = f32(ffi.offsetof(o, "space") + ofs)
-  ffi.copy(o.space + ofs, symexport)
-  ofs = ofs + #symexport
-  o.sect[1].ofs = f32(ffi.offsetof(o, "space") + ofs)
+  o.sect[0].name = ".drectve";
+  o.sect[0].size = f32(#symexport);
+  o.sect[0].flags = f32(0x00100a00);
+  o.sym0.sect = f16(1);
+  o.sym0.scl = 3;
+  o.sym0.name = ".drectve";
+  o.sym0.naux = 1;
+  o.sym0aux.size = f32(#symexport);
+  o.sect[1].name = ".rdata";
+  o.sect[1].size = f32(#s);
+  o.sect[1].flags = f32(0x40300040);
+  o.sym1.sect = f16(2);
+  o.sym1.scl = 3;
+  o.sym1.name = ".rdata";
+  o.sym1.naux = 1;
+  o.sym1aux.size = f32(#s);
+  o.sym2.sect = f16(2);
+  o.sym2.scl = 2;
+  o.sym2.nameref[1] = f32(4);
+  o.sym3.sect = f16(-1);
+  o.sym3.scl = 2;
+  o.sym3.value = f32(1);
+  o.sym3.name = "@feat.00"; // Mark as SafeSEH compliant.
+  ffi.copy(o.space, symname);
+  var ofs = #symname + 1;
+  o.strtabsize = f32(ofs + 4);
+  o.sect[0].ofs = f32(ffi.offsetof(o, "space") + ofs);
+  ffi.copy(o.space + ofs, symexport);
+  ofs +=   #symexport;
+  o.sect[1].ofs = f32(ffi.offsetof(o, "space") + ofs);
 
   // Write PE object file.
-  var fp = savefile(output, "wb")
-  fp->write(ffi.string(o, ffi.sizeof(o)-4096+ofs))
-  bcsave_tail(fp, output, s)
+  var fp = savefile(output, "wb");
+  fp->write(ffi.string(o, ffi.sizeof(o)-4096+ofs));
+  bcsave_tail(fp, output, s);
 }
 
 var function bcsave_machobj(ctx, output, s, ffi) {
@@ -487,168 +487,168 @@ typedef struct {
   mach_nlist sym_entry;
   uint8_t space[4096];
 } mach_fat_obj;
-]=])
-  var symname = '_'..LJBC_PREFIX..ctx.modname
-  var isfat, is64, align, mobj = false, false, 4, "mach_obj"
+]=]);
+  var symname = '_'..LJBC_PREFIX..ctx.modname;
+  var isfat, is64, align, mobj = false, false, 4, "mach_obj";
   if( ctx.arch == "x64" ) {
-    is64, align, mobj = true, 8, "mach_obj_64"
+    is64, align, mobj = true, 8, "mach_obj_64";
   } else if( ctx.arch == "arm" ) {
-    isfat, mobj = true, "mach_fat_obj"
+    isfat, mobj = true, "mach_fat_obj";
   } else if( ctx.arch == "arm64" ) {
-    is64, align, isfat, mobj = true, 8, true, "mach_fat_obj"
+    is64, align, isfat, mobj = true, 8, true, "mach_fat_obj";
   } else {
-    check(ctx.arch == "x86", "unsupported architecture for OSX")
+    check(ctx.arch == "x86", "unsupported architecture for OSX");
   }
-  var function aligned(v, a) { return bit.band(v+a-1, -a) }
-  var be32 = bit.bswap // Mach-O FAT is BE, supported archs are LE.
+  var function aligned(v, a) { return bit.band(v+a-1, -a); }
+  var be32 = bit.bswap; // Mach-O FAT is BE, supported archs are LE.
 
   // Create Mach-O object and fill in header.
-  var o = ffi.new(mobj)
-  var mach_size = aligned(ffi.offsetof(o, "space")+#symname+2, align)
-  var cputype = ({ x86={7}, x64={0x01000007}, arm={7,12}, arm64={0x01000007,0x0100000c} })[ctx.arch]
-  var cpusubtype = ({ x86={3}, x64={3}, arm={3,9}, arm64={3,0} })[ctx.arch]
+  var o = ffi.new(mobj);
+  var mach_size = aligned(ffi.offsetof(o, "space")+#symname+2, align);
+  var cputype = ({ x86={7}, x64={0x01000007}, arm={7,12}, arm64={0x01000007,0x0100000c} })[ctx.arch];
+  var cpusubtype = ({ x86={3}, x64={3}, arm={3,9}, arm64={3,0} })[ctx.arch];
   if( isfat ) {
-    o.fat.magic = be32(0xcafebabe)
-    o.fat.nfat_arch = be32(#cpusubtype)
+    o.fat.magic = be32(0xcafebabe);
+    o.fat.nfat_arch = be32(#cpusubtype);
   }
 
   // Fill in sections and symbols.
   for( i=0,#cpusubtype-1 ) {
-    var ofs = 0
+    var ofs = 0;
     if( isfat ) {
-      var a = o.fat_arch[i]
-      a.cputype = be32(cputype[i+1])
-      a.cpusubtype = be32(cpusubtype[i+1])
+      var a = o.fat_arch[i];
+      a.cputype = be32(cputype[i+1]);
+      a.cpusubtype = be32(cpusubtype[i+1]);
       // Subsequent slices overlap each other to share data.
-      ofs = ffi.offsetof(o, "arch") + i*ffi.sizeof(o.arch[0])
-      a.offset = be32(ofs)
-      a.size = be32(mach_size-ofs+#s)
+      ofs = ffi.offsetof(o, "arch") + i*ffi.sizeof(o.arch[0]);
+      a.offset = be32(ofs);
+      a.size = be32(mach_size-ofs+#s);
     }
-    var a = o.arch[i]
-    a.hdr.magic = is64 && 0xfeedfacf || 0xfeedface
-    a.hdr.cputype = cputype[i+1]
-    a.hdr.cpusubtype = cpusubtype[i+1]
-    a.hdr.filetype = 1
-    a.hdr.ncmds = 2
-    a.hdr.sizeofcmds = ffi.sizeof(a.seg)+ffi.sizeof(a.sec)+ffi.sizeof(a.sym)
-    a.seg.cmd = is64 && 0x19 || 0x1
-    a.seg.cmdsize = ffi.sizeof(a.seg)+ffi.sizeof(a.sec)
-    a.seg.vmsize = #s
-    a.seg.fileoff = mach_size-ofs
-    a.seg.filesize = #s
-    a.seg.maxprot = 1
-    a.seg.initprot = 1
-    a.seg.nsects = 1
-    ffi.copy(a.sec.sectname, "__data")
-    ffi.copy(a.sec.segname, "__DATA")
-    a.sec.size = #s
-    a.sec.offset = mach_size-ofs
-    a.sym.cmd = 2
-    a.sym.cmdsize = ffi.sizeof(a.sym)
-    a.sym.symoff = ffi.offsetof(o, "sym_entry")-ofs
-    a.sym.nsyms = 1
-    a.sym.stroff = ffi.offsetof(o, "sym_entry")+ffi.sizeof(o.sym_entry)-ofs
-    a.sym.strsize = aligned(#symname+2, align)
+    var a = o.arch[i];
+    a.hdr.magic = is64 && 0xfeedfacf || 0xfeedface;
+    a.hdr.cputype = cputype[i+1];
+    a.hdr.cpusubtype = cpusubtype[i+1];
+    a.hdr.filetype = 1;
+    a.hdr.ncmds = 2;
+    a.hdr.sizeofcmds = ffi.sizeof(a.seg)+ffi.sizeof(a.sec)+ffi.sizeof(a.sym);
+    a.seg.cmd = is64 && 0x19 || 0x1;
+    a.seg.cmdsize = ffi.sizeof(a.seg)+ffi.sizeof(a.sec);
+    a.seg.vmsize = #s;
+    a.seg.fileoff = mach_size-ofs;
+    a.seg.filesize = #s;
+    a.seg.maxprot = 1;
+    a.seg.initprot = 1;
+    a.seg.nsects = 1;
+    ffi.copy(a.sec.sectname, "__data");
+    ffi.copy(a.sec.segname, "__DATA");
+    a.sec.size = #s;
+    a.sec.offset = mach_size-ofs;
+    a.sym.cmd = 2;
+    a.sym.cmdsize = ffi.sizeof(a.sym);
+    a.sym.symoff = ffi.offsetof(o, "sym_entry")-ofs;
+    a.sym.nsyms = 1;
+    a.sym.stroff = ffi.offsetof(o, "sym_entry")+ffi.sizeof(o.sym_entry)-ofs;
+    a.sym.strsize = aligned(#symname+2, align);
   }
-  o.sym_entry.type = 0xf
-  o.sym_entry.sect = 1
-  o.sym_entry.strx = 1
-  ffi.copy(o.space+1, symname)
+  o.sym_entry.type = 0xf;
+  o.sym_entry.sect = 1;
+  o.sym_entry.strx = 1;
+  ffi.copy(o.space+1, symname);
 
   // Write Macho-O object file.
-  var fp = savefile(output, "wb")
-  fp->write(ffi.string(o, mach_size))
-  bcsave_tail(fp, output, s)
+  var fp = savefile(output, "wb");
+  fp->write(ffi.string(o, mach_size));
+  bcsave_tail(fp, output, s);
 }
 
 var function bcsave_obj(ctx, output, s) {
-  var ok, ffi = pcall(require, "ffi")
-  check(ok, "FFI library required to write this file type")
+  var ok, ffi = pcall(require, "ffi");
+  check(ok, "FFI library required to write this file type");
   if( ctx.os == "windows" ) {
-    return bcsave_peobj(ctx, output, s, ffi)
+    return bcsave_peobj(ctx, output, s, ffi);
   } else if( ctx.os == "osx" ) {
-    return bcsave_machobj(ctx, output, s, ffi)
+    return bcsave_machobj(ctx, output, s, ffi);
   } else {
-    return bcsave_elfobj(ctx, output, s, ffi)
+    return bcsave_elfobj(ctx, output, s, ffi);
   }
 }
 
 //----------------------------------------------------------------------------
 
 var function bclist(input, output) {
-  var f = readfile(input)
-  require("jit.bc").dump(f, savefile(output, "w"), true)
+  var f = readfile(input);
+  require("jit.bc").dump(f, savefile(output, "w"), true);
 }
 
 var function bcsave(ctx, input, output) {
-  var f = readfile(input)
-  var s = string.dump(f, ctx.strip)
-  var t = ctx.type
+  var f = readfile(input);
+  var s = string.dump(f, ctx.strip);
+  var t = ctx.type;
   if( ! t ) {
-    t = detecttype(output)
-    ctx.type = t
+    t = detecttype(output);
+    ctx.type = t;
   }
   if( t == "raw" ) {
-    bcsave_raw(output, s)
+    bcsave_raw(output, s);
   } else {
-    if( ! ctx.modname ) { ctx.modname = detectmodname(input) }
+    if( ! ctx.modname ) { ctx.modname = detectmodname(input); }
     if( t == "obj" ) {
-      bcsave_obj(ctx, output, s)
+      bcsave_obj(ctx, output, s);
     } else {
-      bcsave_c(ctx, output, s)
+      bcsave_c(ctx, output, s);
     }
   }
 }
 
 var function docmd(...) {
-  var arg = {...}
-  var n = 1
-  var list = false
+  var arg = {...};
+  var n = 1;
+  var list = false;
   var ctx = {
     strip = true, arch = jit.arch, os = string.lower(jit.os),
     type = false, modname = false,
-  }
-  while ( n <= #arg ) {
-    var a = arg[n]
+  };
+  while( n <= #arg ) {
+    var a = arg[n];
     if( type(a) == "string" && string.sub(a, 1, 1) == "-" && a != "-" ) {
-      table.remove(arg, n)
-      if( a == "--" ) { break }
+      table.remove(arg, n);
+      if( a == "--" ) { break; }
       for( m=2,#a ) {
-	var opt = string.sub(a, m, m)
+	var opt = string.sub(a, m, m);
 	if( opt == "l" ) {
-	  list = true
+	  list = true;
 	} else if( opt == "s" ) {
-	  ctx.strip = true
+	  ctx.strip = true;
 	} else if( opt == "g" ) {
-	  ctx.strip = false
+	  ctx.strip = false;
 	} else {
-	  if( arg[n] == null || m != #a ) { usage() }
+	  if( arg[n] == null || m != #a ) { usage(); }
 	  if( opt == "e" ) {
-	    if( n != 1 ) { usage() }
-	    arg[1] = check(loadstring(arg[1]))
+	    if( n != 1 ) { usage(); }
+	    arg[1] = check(loadstring(arg[1]));
 	  } else if( opt == "n" ) {
-	    ctx.modname = checkmodname(table.remove(arg, n))
+	    ctx.modname = checkmodname(table.remove(arg, n));
 	  } else if( opt == "t" ) {
-	    ctx.type = checkarg(table.remove(arg, n), map_type, "file type")
+	    ctx.type = checkarg(table.remove(arg, n), map_type, "file type");
 	  } else if( opt == "a" ) {
-	    ctx.arch = checkarg(table.remove(arg, n), map_arch, "architecture")
+	    ctx.arch = checkarg(table.remove(arg, n), map_arch, "architecture");
 	  } else if( opt == "o" ) {
-	    ctx.os = checkarg(table.remove(arg, n), map_os, "OS name")
+	    ctx.os = checkarg(table.remove(arg, n), map_os, "OS name");
 	  } else {
-	    usage()
+	    usage();
 	  }
 	}
       }
     } else {
-      n = n + 1
+      n +=   1;
     }
   }
   if( list ) {
-    if( #arg == 0 || #arg > 2 ) { usage() }
-    bclist(arg[1], arg[2] || "-")
+    if( #arg == 0 || #arg > 2 ) { usage(); }
+    bclist(arg[1], arg[2] || "-");
   } else {
-    if( #arg != 2 ) { usage() }
-    bcsave(ctx, arg[1], arg[2])
+    if( #arg != 2 ) { usage(); }
+    bcsave(ctx, arg[1], arg[2]);
   }
 }
 
@@ -657,5 +657,5 @@ var function docmd(...) {
 // Public module functions.
 return {
   start = docmd // Process -b command line option.
-}
+};
 

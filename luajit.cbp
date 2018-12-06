@@ -2,7 +2,7 @@
 <CodeBlocks_project_file>
 	<FileVersion major="1" minor="6" />
 	<Project>
-		<Option title="luajit" />
+		<Option title="ljsjit" />
 		<Option pch_mode="2" />
 		<Option compiler="gcc" />
 		<Build>
@@ -50,6 +50,7 @@
 			<Add option="-Wall" />
 			<Add option="-fno-stack-protector" />
 			<Add option="-DLUAJIT_LJS=1" />
+			<Add option="-DLUAJIT_ENABLE_LUA52COMPAT=1" />
 			<Add option="-DLUAJIT_OS=LUAJIT_OS_LINUX" />
 			<Add option="-DLUAJIT_TARGET=LUAJIT_ARCH_x64" />
 			<Add option="-DLJ_ARCH_HASFPU=1" />

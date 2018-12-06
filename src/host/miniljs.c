@@ -124,22 +124,30 @@ VCALL,
 VVARARG
 }expkind;
 enum RESERVED{
-TK_AND=257,TK_BREAK,
-TK_DO,TK_ELSE,TK_ELSEIF,TK_END,TK_FALSE,TK_FOR,TK_FUNCTION,
-TK_IF,TK_IN,TK_LOCAL,TK_NIL,TK_NOT,TK_OR,TK_REPEAT,
-TK_RETURN,TK_THEN,TK_TRUE,TK_UNTIL,TK_WHILE,
-TK_CONCAT,TK_DOTS,TK_EQ,TK_GE,TK_LE,TK_NE,TK_NUMBER,
-TK_NAME,TK_STRING,TK_EOS
+TK_BREAK=257,TK_CASE,TK_CONTINUE,
+TK_DEFAULT,TK_DO,TK_ELSE,TK_FALSE,TK___FILE__,TK_FOR,TK_FUNCTION,
+TK_GOTO,TK_IF,TK_IN,TK___LINE__,TK_LOCAL,TK_NIL,
+TK_RETURN,TK_SWITCH,TK_TRUE,TK_WHILE,
+TK_AND,TK_NOT,TK_OR,TK_POW,
+TK_CONCAT,TK_DOTS,TK_EQ,TK_GE,TK_LE,TK_NE,
+TK_CADD,TK_CSUB,TK_CMUL,TK_CDIV,TK_CMOD,TK_CCONCAT,
+TK_PLUSPLUS,TK_MINUSMINUS,
+TK_SHL,TK_SHR,
+TK_ARROW,TK_DBCOLON,TK_EOS,
+TK_NUMBER,TK_NAME,TK_STRING,
+TK_LAST_TOKEN
 };
 typedef enum BinOpr{
-OPR_ADD,OPR_SUB,OPR_MUL,OPR_DIV,OPR_MOD,OPR_POW,
+OPR_ADD,OPR_SUB,OPR_MUL,OPR_MOD,OPR_POW,OPR_DIV,
+OPR_BAND,OPR_BOR,OPR_BXOR,
+OPR_SHL,OPR_SHR,
 OPR_CONCAT,
 OPR_NE,OPR_EQ,
 OPR_LT,OPR_LE,OPR_GT,OPR_GE,
 OPR_AND,OPR_OR,
 OPR_NOBINOPR
 }BinOpr;
-typedef enum UnOpr{OPR_MINUS,OPR_NOT,OPR_LEN,OPR_NOUNOPR}UnOpr;
+typedef enum UnOpr{OPR_MINUS,OPR_BNOT,OPR_NOT,OPR_LEN,OPR_PLUSPLUS,OPR_MINUSMINUS,OPR_NOUNOPR}UnOpr;
 #define LUA_QL(x)"'"x"'"
 #define luai_apicheck(L,o){(void)L;}
 #define lua_number2str(s,n)sprintf((s),"%.14g",(n))
@@ -172,6 +180,7 @@ static int lua_type(lua_State*L,int idx);
 static const char* lua_tolstring(lua_State*L,int idx,size_t*len);
 static size_t lua_objlen(lua_State*L,int idx);
 static void lua_pushlstring(lua_State*L,const char*s,size_t l);
+static const char* lua_pushfstring(lua_State*L,const char*fmt,...);
 static void lua_pushcclosure(lua_State*L,lua_CFunction fn,int n);
 static void lua_createtable(lua_State*L,int narr,int nrec);
 static void lua_setfield(lua_State*L,int idx,const char*k);
@@ -770,7 +779,7 @@ static TValue*luaH_setnum(lua_State*L,Table*t,int key);
 static const TValue*luaH_getstr(Table*t,TString*key);
 static TValue*luaH_set(lua_State*L,Table*t,const TValue*key);
 static const char*const luaT_typenames[]={
-"nil","boolean","userdata","number",
+"null","boolean","userdata","number",
 "string","table","function","userdata","thread",
 "proto","upval"
 };
@@ -2660,12 +2669,16 @@ opmode(0,1,OpArgR,OpArgN,iABC)
 #define next(ls)(ls->current=zgetc(ls->z))
 #define currIsNewline(ls)(ls->current=='\n'||ls->current=='\r')
 static const char*const luaX_tokens[]={
-"and","break","do","else","elseif",
-"end","false","for","function","if",
-"in","local","nil","not","or","repeat",
-"return","then","true","until","while",
-"..","...","==",">=","<=","~=",
-"<number>","<name>","<string>","<eof>",
+"break","case","continue","default","do","else",
+"false","__FILE__","for","function","goto","if",
+"in","__LINE__","var","null",
+"return","switch","true","while",
+"&&","||","!","**",
+"..","...","==",">=","<=","!=",
+"+=","-=","*=","/=","%=","..=",
+"++","--",
+"<<",">>","->","::","<eof>",
+"<number>","<name>","<string>",
 NULL
 };
 #define save_and_next(ls)(save(ls,ls->current),next(ls))
@@ -2763,6 +2776,7 @@ if(p[n]==from)p[n]=to;
 static void read_numeral(LexState*ls,SemInfo*seminfo){
 do{
 save_and_next(ls);
+while(ls->current=='_')next(ls);
 }while(isdigit(ls->current)||ls->current=='.');
 if(check_next(ls,"Ee"))
 check_next(ls,"+-");
@@ -2882,26 +2896,50 @@ case'\r':{
 inclinenumber(ls);
 continue;
 }
-case'-':{
+case'/':{
 next(ls);
-if(ls->current!='-')return'-';
-next(ls);
-if(ls->current=='['){
-int sep=skip_sep(ls);
-luaZ_resetbuffer(ls->buff);
-if(sep>=0){
-read_long_string(ls,NULL,sep);
-luaZ_resetbuffer(ls->buff);
-continue;
-}
-}
+//short comment
+if(ls->current=='/'){
 while(!currIsNewline(ls)&&ls->current!=(-1))
 next(ls);
-continue;
+break;
+//long comment
+}else if(ls->current=='*'){
+for(;;){
+switch(ls->current){
+case(-1):
+luaX_lexerror(ls,"unfinished long comment",TK_EOS);
+break;
+case'*':
+next(ls);
+if(ls->current=='/'){
+next(ls);
+goto end_long_comment;
+}
+break;
+case'\n':
+case'\r':{
+inclinenumber(ls);
+break;
+}
+default:
+next(ls);
+}
+}
+}else{
+if(ls->current=='='){
+next(ls);
+return TK_CDIV;
+}else{
+return'/';
+}
+};
+end_long_comment:
+break;
 }
 case'[':{
 int sep=skip_sep(ls);
-if(sep>=0){
+if(sep>0){
 read_long_string(ls,seminfo,sep);
 return TK_STRING;
 }
@@ -2923,10 +2961,49 @@ next(ls);
 if(ls->current!='=')return'>';
 else{next(ls);return TK_GE;}
 }
-case'~':{
+case'!':{
 next(ls);
-if(ls->current!='=')return'~';
+if(ls->current!='=')return TK_NOT;
 else{next(ls);return TK_NE;}
+}
+case'&':{
+next(ls);
+if(check_next(ls,"&"))return TK_AND;
+return'&';
+}
+case'|':{
+next(ls);
+if(check_next(ls,"|"))return TK_OR;
+return'|';
+}
+case':':{
+next(ls);
+if(check_next(ls,":"))return TK_DBCOLON;
+return':';
+}
+case'+':{
+next(ls);
+if(check_next(ls,"="))return TK_CADD;
+if(check_next(ls,"+"))return TK_PLUSPLUS;
+return'+';
+}
+case'-':{
+next(ls);
+if(check_next(ls,"="))return TK_CSUB;
+if(check_next(ls,">"))return TK_ARROW;
+if(check_next(ls,"-"))return TK_MINUSMINUS;
+return'-';
+}
+case'*':{
+next(ls);
+if(check_next(ls,"="))return TK_CMUL;
+if(check_next(ls,"*"))return TK_POW;
+return'*';
+}
+case'%':{
+next(ls);
+if(check_next(ls,"="))return TK_CMOD;
+return'%';
 }
 case'"':
 case'\'':{
@@ -2938,6 +3015,7 @@ save_and_next(ls);
 if(check_next(ls,".")){
 if(check_next(ls,"."))
 return TK_DOTS;
+else if(check_next(ls,"="))return TK_CCONCAT;
 else return TK_CONCAT;
 }
 else if(!isdigit(ls->current))return'.';
@@ -3297,6 +3375,11 @@ e->f=e->t=(-1);
 e->u.s.info=reg;
 e->k=VNONRELOC;
 }
+static void luaK_exp2reg(FuncState*fs,expdesc*e,int reg){
+luaK_dischargevars(fs,e);
+freeexp(fs,e);
+exp2reg(fs,e,reg);
+}
 static void luaK_exp2nextreg(FuncState*fs,expdesc*e){
 luaK_dischargevars(fs,e);
 freeexp(fs,e);
@@ -3503,7 +3586,7 @@ if(luai_numisnan(r))return 0;
 e1->u.nval=r;
 return 1;
 }
-static void codearith(FuncState*fs,OpCode op,expdesc*e1,expdesc*e2){
+static void luaK_codearith(FuncState*fs,OpCode op,expdesc*e1,expdesc*e2){
 if(constfolding(op,e1,e2))
 return;
 else{
@@ -3542,13 +3625,13 @@ switch(op){
 case OPR_MINUS:{
 if(!isnumeral(e))
 luaK_exp2anyreg(fs,e);
-codearith(fs,OP_UNM,e,&e2);
+luaK_codearith(fs,OP_UNM,e,&e2);
 break;
 }
 case OPR_NOT:codenot(fs,e);break;
 case OPR_LEN:{
 luaK_exp2anyreg(fs,e);
-codearith(fs,OP_LEN,e,&e2);
+luaK_codearith(fs,OP_LEN,e,&e2);
 break;
 }
 default:;
@@ -3602,16 +3685,16 @@ e1->k=VRELOCABLE;e1->u.s.info=e2->u.s.info;
 }
 else{
 luaK_exp2nextreg(fs,e2);
-codearith(fs,OP_CONCAT,e1,e2);
+luaK_codearith(fs,OP_CONCAT,e1,e2);
 }
 break;
 }
-case OPR_ADD:codearith(fs,OP_ADD,e1,e2);break;
-case OPR_SUB:codearith(fs,OP_SUB,e1,e2);break;
-case OPR_MUL:codearith(fs,OP_MUL,e1,e2);break;
-case OPR_DIV:codearith(fs,OP_DIV,e1,e2);break;
-case OPR_MOD:codearith(fs,OP_MOD,e1,e2);break;
-case OPR_POW:codearith(fs,OP_POW,e1,e2);break;
+case OPR_ADD:luaK_codearith(fs,OP_ADD,e1,e2);break;
+case OPR_SUB:luaK_codearith(fs,OP_SUB,e1,e2);break;
+case OPR_MUL:luaK_codearith(fs,OP_MUL,e1,e2);break;
+case OPR_DIV:luaK_codearith(fs,OP_DIV,e1,e2);break;
+case OPR_MOD:luaK_codearith(fs,OP_MOD,e1,e2);break;
+case OPR_POW:luaK_codearith(fs,OP_POW,e1,e2);break;
 case OPR_EQ:codecomp(fs,OP_EQ,1,e1,e2);break;
 case OPR_NE:codecomp(fs,OP_EQ,0,e1,e2);break;
 case OPR_LT:codecomp(fs,OP_LT,1,e1,e2);break;
@@ -3658,10 +3741,12 @@ fs->freereg=base+1;
 typedef struct BlockCnt{
 struct BlockCnt*previous;
 int breaklist;
+int continuelist;
 lu_byte nactvar;
 lu_byte upval;
 lu_byte isbreakable;
 }BlockCnt;
+static int statement(LexState*ls);
 static void chunk(LexState*ls);
 static void expr(LexState*ls,expdesc*v);
 static void anchor_token(LexState*ls){
@@ -3740,8 +3825,16 @@ return fs->nlocvars++;
 #define new_localvarliteral(ls,v,n)new_localvar(ls,luaX_newstring(ls,""v,(sizeof(v)/sizeof(char))-1),n)
 static void new_localvar(LexState*ls,TString*name,int n){
 FuncState*fs=ls->fs;
-luaY_checklimit(fs,fs->nactvar+n+1,200,"local variables");
-fs->actvar[fs->nactvar+n]=cast(unsigned short,registerlocalvar(ls,name));
+int vidx,nactvar_n;
+vidx=fs->bl?fs->bl->nactvar:0;
+nactvar_n=fs->nactvar+n;
+for(;vidx<nactvar_n;++vidx){
+if(name==getlocvar(fs,vidx).varname)
+luaX_syntaxerror(ls,luaO_pushfstring(ls->L,
+"Name [%s] already declared",getstr(name)));
+}
+luaY_checklimit(fs,nactvar_n+1,200,"local variables");
+fs->actvar[nactvar_n]=cast(unsigned short,registerlocalvar(ls,name));
 }
 static void adjustlocalvars(LexState*ls,int nvars){
 FuncState*fs=ls->fs;
@@ -3840,11 +3933,26 @@ luaX_lexerror(ls,"chunk has too many syntax levels",0);
 #define leavelevel(ls)((ls)->L->nCcalls--)
 static void enterblock(FuncState*fs,BlockCnt*bl,lu_byte isbreakable){
 bl->breaklist=(-1);
+bl->continuelist=(-1);
 bl->isbreakable=isbreakable;
 bl->nactvar=fs->nactvar;
 bl->upval=0;
 bl->previous=fs->bl;
 fs->bl=bl;
+}
+static void continuestat(LexState*ls){
+FuncState*fs=ls->fs;
+BlockCnt*bl=fs->bl;
+int upval=0;
+while(bl&&!bl->isbreakable){
+upval|=bl->upval;
+bl=bl->previous;
+}
+if(!bl)
+luaX_syntaxerror(ls,"no loop to continue");
+if(upval)
+luaK_codeABC(fs,OP_CLOSE,bl->nactvar,0,0);
+luaK_concat(fs,&bl->continuelist,luaK_jump(fs));
 }
 static void leaveblock(FuncState*fs){
 BlockCnt*bl=fs->bl;
@@ -3964,7 +4072,8 @@ checkname(ls,&key);
 else
 yindex(ls,&key);
 cc->nh++;
-checknext(ls,'=');
+if(!(testnext(ls,'=')||testnext(ls,':')))
+luaX_syntaxerror(ls,"expect '=' or ':' as key value delimiter");
 rkkey=luaK_exp2RK(fs,&key);
 expr(ls,&val);
 luaK_codeABC(fs,OP_SETTABLE,cc->t->u.s.info,rkkey,luaK_exp2RK(fs,&val));
@@ -3998,7 +4107,27 @@ luaY_checklimit(ls->fs,cc->na,(INT_MAX-2),"items in a constructor");
 cc->na++;
 cc->tostore++;
 }
-static void constructor(LexState*ls,expdesc*t){
+static void table_field(LexState*ls,struct ConsControl*cc){
+switch(ls->t.token){
+case TK_NAME:{
+luaX_lookahead(ls);
+if(!((ls->lookahead.token=='=')||(ls->lookahead.token==':')))
+listfield(ls,cc);
+else
+recfield(ls,cc);
+break;
+}
+case'[':{
+recfield(ls,cc);
+break;
+}
+default:{
+listfield(ls,cc);
+break;
+}
+}
+}
+static void constructor_base(LexState*ls,expdesc*t,int openTk,int closeTk){
 FuncState*fs=ls->fs;
 int line=ls->linenumber;
 int pc=luaK_codeABC(fs,OP_NEWTABLE,0,0,0);
@@ -4008,33 +4137,23 @@ cc.t=t;
 init_exp(t,VRELOCABLE,pc);
 init_exp(&cc.v,VVOID,0);
 luaK_exp2nextreg(ls->fs,t);
-checknext(ls,'{');
+checknext(ls,openTk);
 do{
-if(ls->t.token=='}')break;
+if(ls->t.token==closeTk)break;
 closelistfield(fs,&cc);
-switch(ls->t.token){
-case TK_NAME:{
-luaX_lookahead(ls);
-if(ls->lookahead.token!='=')
-listfield(ls,&cc);
-else
-recfield(ls,&cc);
-break;
-}
-case'[':{
-recfield(ls,&cc);
-break;
-}
-default:{
-listfield(ls,&cc);
-break;
-}
-}
+if(openTk=='{')table_field(ls,&cc);
+else listfield(ls,&cc);
 }while(testnext(ls,',')||testnext(ls,';'));
-check_match(ls,'}','{',line);
+check_match(ls,closeTk,openTk,line);
 lastlistfield(fs,&cc);
 SETARG_B(fs->f->code[pc],luaO_int2fb(cc.na));
 SETARG_C(fs->f->code[pc],luaO_int2fb(cc.nh));
+}
+static void constructor(LexState*ls,expdesc*t){
+constructor_base(ls,t,'{','}');
+}
+static void constructor_array(LexState*ls,expdesc*t){
+constructor_base(ls,t,'[',']');
 }
 static void parlist(LexState*ls){
 FuncState*fs=ls->fs;
@@ -4055,26 +4174,33 @@ break;
 }
 default:luaX_syntaxerror(ls,"<name> or "LUA_QL("...")" expected");
 }
+if(testnext(ls,':')){
+checknext(ls,TK_NAME);
+}
 }while(!f->is_vararg&&testnext(ls,','));
 }
 adjustlocalvars(ls,nparams);
 f->numparams=cast_byte(fs->nactvar-(f->is_vararg&1));
 luaK_reserveregs(fs,fs->nactvar);
 }
-static void body(LexState*ls,expdesc*e,int needself,int line){
+static void body(LexState*ls,expdesc*e,int needthis,int line){
 FuncState new_fs;
 open_func(ls,&new_fs);
 new_fs.f->linedefined=line;
 checknext(ls,'(');
-if(needself){
-new_localvarliteral(ls,"self",0);
+if(needthis){
+new_localvarliteral(ls,"this",0);
 adjustlocalvars(ls,1);
 }
 parlist(ls);
 checknext(ls,')');
+if(testnext(ls,':')){
+checknext(ls,TK_NAME);
+}
+checknext(ls,'{');
 chunk(ls);
 new_fs.f->lastlinedefined=ls->linenumber;
-check_match(ls,TK_END,TK_FUNCTION,line);
+check_match(ls,'}',TK_FUNCTION,line);
 close_func(ls);
 pushclosure(ls,&new_fs,e);
 }
@@ -4107,15 +4233,6 @@ luaK_setmultret(fs,&args);
 check_match(ls,')','(',line);
 break;
 }
-case'{':{
-constructor(ls,&args);
-break;
-}
-case TK_STRING:{
-codestring(ls,&args,ls->t.seminfo.ts);
-luaX_next(ls);
-break;
-}
 default:{
 luaX_syntaxerror(ls,"function arguments expected");
 return;
@@ -4133,6 +4250,7 @@ init_exp(f,VCALL,luaK_codeABC(fs,OP_CALL,base,nparams+1,2));
 luaK_fixline(fs,line);
 fs->freereg=base+1;
 }
+static void inc_dec_op(LexState*ls,OpCode op,expdesc*v,int isPost);
 static void prefixexp(LexState*ls,expdesc*v){
 switch(ls->t.token){
 case'(':{
@@ -4140,11 +4258,39 @@ int line=ls->linenumber;
 luaX_next(ls);
 expr(ls,v);
 check_match(ls,')','(',line);
+if(testnext(ls,'?')){
+int condexit;
+int escapelist=(-1);
+int reg;
+FuncState*fs=ls->fs;
+if(v->k==VNIL)v->k=VFALSE;
+luaK_goiftrue(ls->fs,v);
+condexit=v->f;
+expr(ls,v);
+reg=luaK_exp2anyreg(fs,v);
+luaK_concat(fs,&escapelist,luaK_jump(fs));
+luaK_patchtohere(fs,condexit);
+checknext(ls,':');
+expr(ls,v);
+luaK_exp2reg(fs,v,reg);
+luaK_patchtohere(fs,escapelist);
+return;
+}
 luaK_dischargevars(ls->fs,v);
 return;
 }
 case TK_NAME:{
 singlevar(ls,v);
+return;
+}
+case TK_PLUSPLUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_ADD,v,0);
+return;
+}
+case TK_MINUSMINUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_SUB,v,0);
 return;
 }
 default:{
@@ -4169,7 +4315,7 @@ yindex(ls,&key);
 luaK_indexed(fs,v,&key);
 break;
 }
-case':':{
+case TK_ARROW:{
 expdesc key;
 luaX_next(ls);
 checkname(ls,&key);
@@ -4177,9 +4323,19 @@ luaK_self(fs,v,&key);
 funcargs(ls,v);
 break;
 }
-case'(':case TK_STRING:case'{':{
+case'(':{
 luaK_exp2nextreg(fs,v);
 funcargs(ls,v);
+break;
+}
+case TK_PLUSPLUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_ADD,v,1);
+break;
+}
+case TK_MINUSMINUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_SUB,v,1);
 break;
 }
 default:return;
@@ -4221,9 +4377,32 @@ case'{':{
 constructor(ls,v);
 return;
 }
+case'[':{
+constructor_array(ls,v);
+return;
+}
 case TK_FUNCTION:{
 luaX_next(ls);
 body(ls,v,0,ls->linenumber);
+return;
+}
+case TK___LINE__:{
+init_exp(v,VKNUM,0);
+v->u.nval=ls->linenumber;
+break;
+}
+case TK___FILE__:{
+codestring(ls,v,ls->source);
+break;
+}
+case TK_PLUSPLUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_ADD,v,0);
+return;
+}
+case TK_MINUSMINUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_SUB,v,0);
 return;
 }
 default:{
@@ -4237,7 +4416,10 @@ static UnOpr getunopr(int op){
 switch(op){
 case TK_NOT:return OPR_NOT;
 case'-':return OPR_MINUS;
+case'!':return OPR_BNOT;
 case'#':return OPR_LEN;
+//case TK_PLUSPLUS:return OPR_PLUSPLUS;
+//case TK_MINUSMINUS:return OPR_MINUSMINUS;
 default:return OPR_NOUNOPR;
 }
 }
@@ -4246,9 +4428,14 @@ switch(op){
 case'+':return OPR_ADD;
 case'-':return OPR_SUB;
 case'*':return OPR_MUL;
-case'/':return OPR_DIV;
 case'%':return OPR_MOD;
-case'^':return OPR_POW;
+case TK_POW:return OPR_POW;
+case'/':return OPR_DIV;
+case'&':return OPR_BAND;
+case'|':return OPR_BOR;
+case'^':return OPR_BXOR;
+case TK_SHL:return OPR_SHL;
+case TK_SHR:return OPR_SHR;
 case TK_CONCAT:return OPR_CONCAT;
 case TK_NE:return OPR_NE;
 case TK_EQ:return OPR_EQ;
@@ -4265,10 +4452,15 @@ static const struct{
 lu_byte left;
 lu_byte right;
 }priority[]={
-{6,6},{6,6},{7,7},{7,7},{7,7},
-{10,9},{5,4},
-{3,3},{3,3},
-{3,3},{3,3},{3,3},{3,3},
+{10,10},{10,10},
+{11,11},{11,11},
+{14,13},
+{11,11},
+{6,6},{4,4},{5,5},
+{7,7},{7,7},
+{9,8},
+{3,3},{3,3},{3,3},
+{3,3},{3,3},{3,3},
 {2,2},{1,1}
 };
 static BinOpr subexpr(LexState*ls,expdesc*v,unsigned int limit){
@@ -4278,7 +4470,7 @@ enterlevel(ls);
 uop=getunopr(ls->t.token);
 if(uop!=OPR_NOUNOPR){
 luaX_next(ls);
-subexpr(ls,v,8);
+subexpr(ls,v,12);
 luaK_prefix(ls->fs,uop,v);
 }
 else simpleexp(ls,v);
@@ -4300,17 +4492,28 @@ subexpr(ls,v,0);
 }
 static int block_follow(int token){
 switch(token){
-case TK_ELSE:case TK_ELSEIF:case TK_END:
-case TK_UNTIL:case TK_EOS:
+case'}':
+case TK_ELSE:
+case TK_EOS:
 return 1;
 default:return 0;
 }
 }
 static void block(LexState*ls){
+int line=ls->linenumber;
 FuncState*fs=ls->fs;
 BlockCnt bl;
 enterblock(fs,&bl,0);
+if(testnext(ls,'{'))
+{
 chunk(ls);
+check_match(ls,'}','{',line);
+}
+else
+{
+statement(ls);
+while(testnext(ls,';'));//skip all;after statement it breaks else/elseif
+}
 leaveblock(fs);
 }
 struct LHS_assign{
@@ -4370,12 +4573,44 @@ return;
 init_exp(&e,VNONRELOC,ls->fs->freereg-1);
 luaK_storevar(ls->fs,&lh->v,&e);
 }
+static void assign_compound(LexState*ls,struct LHS_assign*lh,int opType){
+FuncState*fs=ls->fs;
+expdesc lhv,infix,rh;
+int nexps;
+BinOpr op;
+lhv=lh->v;
+check_condition(ls,VLOCAL<=lh->v.k&&lh->v.k<=VINDEXED,
+"syntax error in left hand expression in compound assignment");
+switch(opType){
+case TK_CADD:op=OPR_ADD;break;
+case TK_CSUB:op=OPR_SUB;break;
+case TK_CMUL:op=OPR_MUL;break;
+case TK_CDIV:op=OPR_DIV;break;
+case TK_CMOD:op=OPR_MOD;break;
+};
+luaX_next(ls);
+if(lh->v.k==VINDEXED)luaK_reserveregs(fs,1);
+luaK_exp2nextreg(fs,&lh->v);
+nexps=explist1(ls,&rh);
+check_condition(ls,nexps==1,"syntax error in right hand expression in compound assignment");
+infix=lh->v;
+luaK_infix(fs,op,&infix);
+luaK_posfix(fs,op,&infix,&rh);
+luaK_storevar(fs,&lhv,&infix);
+}
 static int cond(LexState*ls){
 expdesc v;
 expr(ls,&v);
 if(v.k==VNIL)v.k=VFALSE;
 luaK_goiftrue(ls->fs,&v);
 return v.f;
+}
+static int nocond(LexState*ls){
+expdesc v;
+expr(ls,&v);
+if(v.k==VNIL)v.k=VFALSE;
+luaK_goiffalse(ls->fs,&v);
+return v.t;
 }
 static void breakstat(LexState*ls){
 FuncState*fs=ls->fs;
@@ -4391,42 +4626,51 @@ if(upval)
 luaK_codeABC(fs,OP_CLOSE,bl->nactvar,0,0);
 luaK_concat(fs,&bl->breaklist,luaK_jump(fs));
 }
+static void labelstat(LexState*ls,TString*label,int line){
+}
 static void whilestat(LexState*ls,int line){
 FuncState*fs=ls->fs;
 int whileinit;
 int condexit;
 BlockCnt bl;
 luaX_next(ls);
+checknext(ls,'(');
 whileinit=luaK_getlabel(fs);
 condexit=cond(ls);
+checknext(ls,')');
 enterblock(fs,&bl,1);
-checknext(ls,TK_DO);
 block(ls);
+luaK_patchlist(fs,bl.continuelist,whileinit);
 luaK_patchlist(fs,luaK_jump(fs),whileinit);
-check_match(ls,TK_END,TK_WHILE,line);
 leaveblock(fs);
 luaK_patchtohere(fs,condexit);
 }
-static void repeatstat(LexState*ls,int line){
+static void dowhilestat(LexState*ls,int line){
 int condexit;
 FuncState*fs=ls->fs;
-int repeat_init=luaK_getlabel(fs);
+int dowhile_init=luaK_getlabel(fs);
 BlockCnt bl1,bl2;
 enterblock(fs,&bl1,1);
 enterblock(fs,&bl2,0);
 luaX_next(ls);
+checknext(ls,'{');
 chunk(ls);
-check_match(ls,TK_UNTIL,TK_REPEAT,line);
-condexit=cond(ls);
+luaK_patchtohere(fs,bl1.continuelist);
+check_match(ls,'}',TK_DO,line);
+check_match(ls,TK_WHILE,TK_DO,line);
+line=ls->linenumber;
+checknext(ls,'(');
+condexit=nocond(ls);
+check_match(ls,')',TK_WHILE,line);
 if(!bl2.upval){
 leaveblock(fs);
-luaK_patchlist(ls->fs,condexit,repeat_init);
+luaK_patchlist(ls->fs,condexit,dowhile_init);
 }
 else{
 breakstat(ls);
 luaK_patchtohere(ls->fs,condexit);
 leaveblock(fs);
-luaK_patchlist(ls->fs,luaK_jump(fs),repeat_init);
+luaK_patchlist(ls->fs,luaK_jump(fs),dowhile_init);
 }
 leaveblock(fs);
 }
@@ -4443,7 +4687,6 @@ BlockCnt bl;
 FuncState*fs=ls->fs;
 int prep,endfor;
 adjustlocalvars(ls,3);
-checknext(ls,TK_DO);
 prep=isnum?luaK_codeAsBx(fs,OP_FORPREP,base,(-1)):luaK_jump(fs);
 enterblock(fs,&bl,0);
 adjustlocalvars(ls,nvars);
@@ -4451,6 +4694,7 @@ luaK_reserveregs(fs,nvars);
 block(ls);
 leaveblock(fs);
 luaK_patchtohere(fs,prep);
+luaK_patchtohere(fs,bl.previous->continuelist);
 endfor=(isnum)?luaK_codeAsBx(fs,OP_FORLOOP,base,(-1)):
 luaK_codeABC(fs,OP_TFORLOOP,base,0,nvars);
 luaK_fixline(fs,line);
@@ -4473,6 +4717,7 @@ else{
 luaK_codeABx(fs,OP_LOADK,fs->freereg,luaK_numberK(fs,1));
 luaK_reserveregs(fs,1);
 }
+checknext(ls,')');
 forbody(ls,base,line,1,1);
 }
 static void forlist(LexState*ls,TString*indexname){
@@ -4491,6 +4736,7 @@ checknext(ls,TK_IN);
 line=ls->linenumber;
 adjust_assign(ls,3,explist1(ls,&e),&e);
 luaK_checkstack(fs,3);
+checknext(ls,')');
 forbody(ls,base,line,nvars-3,0);
 }
 static void forstat(LexState*ls,int line){
@@ -4499,20 +4745,21 @@ TString*varname;
 BlockCnt bl;
 enterblock(fs,&bl,1);
 luaX_next(ls);
+checknext(ls,'(');
 varname=str_checkname(ls);
 switch(ls->t.token){
 case'=':fornum(ls,varname,line);break;
 case',':case TK_IN:forlist(ls,varname);break;
 default:luaX_syntaxerror(ls,LUA_QL("=")" or "LUA_QL("in")" expected");
 }
-check_match(ls,TK_END,TK_FOR,line);
 leaveblock(fs);
 }
 static int test_then_block(LexState*ls){
 int condexit;
 luaX_next(ls);
+checknext(ls,'(');
 condexit=cond(ls);
-checknext(ls,TK_THEN);
+checknext(ls,')');
 block(ls);
 return condexit;
 }
@@ -4521,21 +4768,19 @@ FuncState*fs=ls->fs;
 int flist;
 int escapelist=(-1);
 flist=test_then_block(ls);
-while(ls->t.token==TK_ELSEIF){
+check_else:
+if(testnext(ls,TK_ELSE)){
 luaK_concat(fs,&escapelist,luaK_jump(fs));
 luaK_patchtohere(fs,flist);
+if(ls->t.token==TK_IF){
 flist=test_then_block(ls);
+goto check_else;
 }
-if(ls->t.token==TK_ELSE){
-luaK_concat(fs,&escapelist,luaK_jump(fs));
-luaK_patchtohere(fs,flist);
-luaX_next(ls);
 block(ls);
 }
 else
 luaK_concat(fs,&escapelist,flist);
 luaK_patchtohere(fs,escapelist);
-check_match(ls,TK_END,TK_IF,line);
 }
 static void localfunc(LexState*ls){
 expdesc v,b;
@@ -4554,6 +4799,9 @@ int nexps;
 expdesc e;
 do{
 new_localvar(ls,str_checkname(ls),nvars++);
+if(testnext(ls,':')){
+checknext(ls,TK_NAME);
+}
 }while(testnext(ls,','));
 if(testnext(ls,'='))
 nexps=explist1(ls,&e);
@@ -4569,7 +4817,7 @@ int needself=0;
 singlevar(ls,v);
 while(ls->t.token=='.')
 field(ls,v);
-if(ls->t.token==':'){
+if(ls->t.token==TK_DBCOLON){
 needself=1;
 field(ls,v);
 }
@@ -4592,7 +4840,21 @@ if(v.v.k==VCALL)
 SETARG_C(getcode(fs,&v.v),1);
 else{
 v.prev=NULL;
+switch(ls->t.token){
+case TK_CADD:case TK_CSUB:case TK_CMUL:
+case TK_CDIV:case TK_CMOD:
+assign_compound(ls,&v,ls->t.token);
+break;
+case',':case'='://case TK_CCONCAT:
 assignment(ls,&v,1);
+break;
+case';':
+break;
+default:
+luaX_syntaxerror(ls,lua_pushfstring(ls->L,
+"'+=', '-=', '*=', '/=', '%%=', '..=' or '=' expected"));
+break;
+}
 }
 }
 static void retstat(LexState*ls){
@@ -4623,6 +4885,89 @@ first=fs->nactvar;
 }
 luaK_ret(fs,first,nret);
 }
+static void codecompcase(FuncState*fs,int base,int nargs,expdesc*e){
+//luaK_codeABC(fs,OP_CMD,base,nargs,CMD_CASE);
+e->u.s.info=luaK_jump(fs);
+e->k=VJMP;
+}
+static void casestat(LexState*ls,expdesc*v){
+FuncState*fs=ls->fs;
+expdesc v2;
+int nargs,base;
+checknext(ls,TK_CASE);
+base=fs->freereg;
+luaK_exp2nextreg(fs,v);
+nargs=explist1(ls,&v2);
+if(!(v2.k==VK||v2.k==VKNUM))luaX_syntaxerror(ls,"case expressions must be constants");
+luaK_exp2nextreg(fs,&v2);
+codecompcase(fs,base,nargs+1,v);
+fs->freereg-=nargs+1;
+if(v->k==VNIL)v->k=VFALSE;
+luaK_goiftrue(fs,v);
+luaK_patchtohere(fs,v->t);
+checknext(ls,':');
+block(ls);
+}
+static void switchstat(LexState*ls,int line){
+FuncState*fs=ls->fs;
+BlockCnt bl;
+int escapelist=(-1);
+expdesc v;
+luaX_next(ls);
+checknext(ls,'(');
+enterblock(fs,&bl,0);
+expr(ls,&v);
+checknext(ls,')');
+checknext(ls,'{');
+int isFirst=1;
+while(ls->t.token==TK_CASE){
+if(!isFirst){
+luaK_concat(fs,&escapelist,luaK_jump(fs));
+luaK_patchtohere(fs,v.f);
+}
+casestat(ls,&v);
+isFirst=0;
+}
+if(ls->t.token==TK_DEFAULT){
+luaK_concat(fs,&escapelist,luaK_jump(fs));
+luaK_patchtohere(fs,v.f);
+luaX_next(ls);
+checknext(ls,':');
+block(ls);
+}else{
+luaK_concat(fs,&escapelist,v.f);
+}
+luaK_patchtohere(fs,escapelist);
+check_match(ls,'}',TK_SWITCH,line);
+leaveblock(fs);
+}
+static void inc_dec_op(LexState*ls,OpCode op,expdesc*v,int isPost){
+FuncState*fs=ls->fs;
+expdesc lv,e1,e2;
+int indices;
+if(!v)v=&lv;
+indices=fs->freereg;
+init_exp(&e2,VKNUM,0);
+e2.u.nval=(lua_Integer)1;
+if(isPost){
+lv=e1=*v;
+if(v->k==VINDEXED)
+luaK_reserveregs(fs,1);
+luaK_exp2nextreg(fs,v);
+luaK_reserveregs(fs,1);//copy again to operate on it
+luaK_codearith(fs,op,&e1,&e2);
+luaK_storevar(fs,&lv,&e1);
+--fs->freereg;//remove extra copy register
+return;
+}
+primaryexp(ls,v);
+e1=*v;
+if(v->k==VINDEXED)
+luaK_reserveregs(fs,fs->freereg-indices);
+luaK_codearith(fs,op,&e1,&e2);
+luaK_storevar(fs,v,&e1);
+if(v!=&lv)luaK_exp2nextreg(fs,v);
+}
 static int statement(LexState*ls){
 int line=ls->linenumber;
 switch(ls->t.token){
@@ -4634,18 +4979,16 @@ case TK_WHILE:{
 whilestat(ls,line);
 return 0;
 }
-case TK_DO:{
-luaX_next(ls);
+case'{':{
 block(ls);
-check_match(ls,TK_END,TK_DO,line);
 return 0;
 }
 case TK_FOR:{
 forstat(ls,line);
 return 0;
 }
-case TK_REPEAT:{
-repeatstat(ls,line);
+case TK_DO:{
+dowhilestat(ls,line);
 return 0;
 }
 case TK_FUNCTION:{
@@ -4668,6 +5011,31 @@ case TK_BREAK:{
 luaX_next(ls);
 breakstat(ls);
 return 1;
+}
+case TK_CONTINUE:{
+luaX_next(ls);
+continuestat(ls);
+return 1;
+}
+case TK_SWITCH:{
+switchstat(ls,line);
+return 0;
+}
+case TK_PLUSPLUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_ADD,NULL,0);
+return 0;
+}
+case TK_MINUSMINUS:{
+luaX_next(ls);
+inc_dec_op(ls,OP_SUB,NULL,0);
+return 0;
+}
+case TK_NAME:{
+if(ls->current==':'){
+labelstat(ls,str_checkname(ls),line);
+return 0;
+}
 }
 default:{
 exprstat(ls);
@@ -4941,6 +5309,8 @@ luaG_aritherror(L,rb,rc);
 #define dojump(L,pc,i){(pc)+=(i);}
 #define Protect(x){L->savedpc=pc;{x;};base=L->base;}
 #define arith_op(op,tm){TValue*rb=RKB(i);TValue*rc=RKC(i);if(ttisnumber(rb)&&ttisnumber(rc)){lua_Number nb=nvalue(rb),nc=nvalue(rc);setnvalue(ra,op(nb,nc));}else Protect(Arith(L,ra,rb,rc,tm));}
+#define OPCODE_TARGET(op)case OP_##op:
+#define CALL_OPCODE(op)switch(op)
 static void luaV_execute(lua_State*L,int nexeccalls){
 LClosure*cl;
 StkId base;
@@ -4955,97 +5325,97 @@ for(;;){
 const Instruction i=*pc++;
 StkId ra;
 ra=RA(i);
-switch(GET_OPCODE(i)){
-case OP_MOVE:{
+CALL_OPCODE(GET_OPCODE(i)){
+OPCODE_TARGET(MOVE){
 setobj(L,ra,RB(i));
 continue;
 }
-case OP_LOADK:{
+OPCODE_TARGET(LOADK){
 setobj(L,ra,KBx(i));
 continue;
 }
-case OP_LOADBOOL:{
+OPCODE_TARGET(LOADBOOL){
 setbvalue(ra,GETARG_B(i));
 if(GETARG_C(i))pc++;
 continue;
 }
-case OP_LOADNIL:{
+OPCODE_TARGET(LOADNIL){
 TValue*rb=RB(i);
 do{
 setnilvalue(rb--);
 }while(rb>=ra);
 continue;
 }
-case OP_GETUPVAL:{
+OPCODE_TARGET(GETUPVAL){
 int b=GETARG_B(i);
 setobj(L,ra,cl->upvals[b]->v);
 continue;
 }
-case OP_GETGLOBAL:{
+OPCODE_TARGET(GETGLOBAL){
 TValue g;
 TValue*rb=KBx(i);
 sethvalue(L,&g,cl->env);
 Protect(luaV_gettable(L,&g,rb,ra));
 continue;
 }
-case OP_GETTABLE:{
+OPCODE_TARGET(GETTABLE){
 Protect(luaV_gettable(L,RB(i),RKC(i),ra));
 continue;
 }
-case OP_SETGLOBAL:{
+OPCODE_TARGET(SETGLOBAL){
 TValue g;
 sethvalue(L,&g,cl->env);
 Protect(luaV_settable(L,&g,KBx(i),ra));
 continue;
 }
-case OP_SETUPVAL:{
+OPCODE_TARGET(SETUPVAL){
 UpVal*uv=cl->upvals[GETARG_B(i)];
 setobj(L,uv->v,ra);
 luaC_barrier(L,uv,ra);
 continue;
 }
-case OP_SETTABLE:{
+OPCODE_TARGET(SETTABLE){
 Protect(luaV_settable(L,ra,RKB(i),RKC(i)));
 continue;
 }
-case OP_NEWTABLE:{
+OPCODE_TARGET(NEWTABLE){
 int b=GETARG_B(i);
 int c=GETARG_C(i);
 sethvalue(L,ra,luaH_new(L,luaO_fb2int(b),luaO_fb2int(c)));
 Protect(luaC_checkGC(L));
 continue;
 }
-case OP_SELF:{
+OPCODE_TARGET(SELF){
 StkId rb=RB(i);
 setobj(L,ra+1,rb);
 Protect(luaV_gettable(L,rb,RKC(i),ra));
 continue;
 }
-case OP_ADD:{
+OPCODE_TARGET(ADD){
 arith_op(luai_numadd,TM_ADD);
 continue;
 }
-case OP_SUB:{
+OPCODE_TARGET(SUB){
 arith_op(luai_numsub,TM_SUB);
 continue;
 }
-case OP_MUL:{
+OPCODE_TARGET(MUL){
 arith_op(luai_nummul,TM_MUL);
 continue;
 }
-case OP_DIV:{
+OPCODE_TARGET(DIV){
 arith_op(luai_numdiv,TM_DIV);
 continue;
 }
-case OP_MOD:{
+OPCODE_TARGET(MOD){
 arith_op(luai_nummod,TM_MOD);
 continue;
 }
-case OP_POW:{
+OPCODE_TARGET(POW){
 arith_op(luai_numpow,TM_POW);
 continue;
 }
-case OP_UNM:{
+OPCODE_TARGET(UNM){
 TValue*rb=RB(i);
 if(ttisnumber(rb)){
 lua_Number nb=nvalue(rb);
@@ -5056,12 +5426,12 @@ Protect(Arith(L,ra,rb,rb,TM_UNM));
 }
 continue;
 }
-case OP_NOT:{
+OPCODE_TARGET(NOT){
 int res=l_isfalse(RB(i));
 setbvalue(ra,res);
 continue;
 }
-case OP_LEN:{
+OPCODE_TARGET(LEN){
 const TValue*rb=RB(i);
 switch(ttype(rb)){
 case 5:{
@@ -5081,18 +5451,18 @@ luaG_typeerror(L,rb,"get length of");
 }
 continue;
 }
-case OP_CONCAT:{
+OPCODE_TARGET(CONCAT){
 int b=GETARG_B(i);
 int c=GETARG_C(i);
 Protect(luaV_concat(L,c-b+1,c);luaC_checkGC(L));
 setobj(L,RA(i),base+b);
 continue;
 }
-case OP_JMP:{
+OPCODE_TARGET(JMP){
 dojump(L,pc,GETARG_sBx(i));
 continue;
 }
-case OP_EQ:{
+OPCODE_TARGET(EQ){
 TValue*rb=RKB(i);
 TValue*rc=RKC(i);
 Protect(
@@ -5102,7 +5472,7 @@ dojump(L,pc,GETARG_sBx(*pc));
 pc++;
 continue;
 }
-case OP_LT:{
+OPCODE_TARGET(LT){
 Protect(
 if(luaV_lessthan(L,RKB(i),RKC(i))==GETARG_A(i))
 dojump(L,pc,GETARG_sBx(*pc));
@@ -5110,7 +5480,7 @@ dojump(L,pc,GETARG_sBx(*pc));
 pc++;
 continue;
 }
-case OP_LE:{
+OPCODE_TARGET(LE){
 Protect(
 if(lessequal(L,RKB(i),RKC(i))==GETARG_A(i))
 dojump(L,pc,GETARG_sBx(*pc));
@@ -5118,13 +5488,13 @@ dojump(L,pc,GETARG_sBx(*pc));
 pc++;
 continue;
 }
-case OP_TEST:{
+OPCODE_TARGET(TEST){
 if(l_isfalse(ra)!=GETARG_C(i))
 dojump(L,pc,GETARG_sBx(*pc));
 pc++;
 continue;
 }
-case OP_TESTSET:{
+OPCODE_TARGET(TESTSET){
 TValue*rb=RB(i);
 if(l_isfalse(rb)!=GETARG_C(i)){
 setobj(L,ra,rb);
@@ -5133,7 +5503,7 @@ dojump(L,pc,GETARG_sBx(*pc));
 pc++;
 continue;
 }
-case OP_CALL:{
+OPCODE_TARGET(CALL){
 int b=GETARG_B(i);
 int nresults=GETARG_C(i)-1;
 if(b!=0)L->top=ra+b;
@@ -5153,7 +5523,7 @@ return;
 }
 }
 }
-case OP_TAILCALL:{
+OPCODE_TARGET(TAILCALL){
 int b=GETARG_B(i);
 if(b!=0)L->top=ra+b;
 L->savedpc=pc;
@@ -5182,7 +5552,7 @@ return;
 }
 }
 }
-case OP_RETURN:{
+OPCODE_TARGET(RETURN){
 int b=GETARG_B(i);
 if(b!=0)L->top=ra+b-1;
 if(L->openupval)luaF_close(L,base);
@@ -5195,7 +5565,7 @@ if(b)L->top=L->ci->top;
 goto reentry;
 }
 }
-case OP_FORLOOP:{
+OPCODE_TARGET(FORLOOP){
 lua_Number step=nvalue(ra+2);
 lua_Number idx=luai_numadd(nvalue(ra),step);
 lua_Number limit=nvalue(ra+1);
@@ -5207,7 +5577,7 @@ setnvalue(ra+3,idx);
 }
 continue;
 }
-case OP_FORPREP:{
+OPCODE_TARGET(FORPREP){
 const TValue*init=ra;
 const TValue*plimit=ra+1;
 const TValue*pstep=ra+2;
@@ -5222,7 +5592,7 @@ setnvalue(ra,luai_numsub(nvalue(ra),nvalue(pstep)));
 dojump(L,pc,GETARG_sBx(i));
 continue;
 }
-case OP_TFORLOOP:{
+OPCODE_TARGET(TFORLOOP){
 StkId cb=ra+3;
 setobj(L,cb+2,ra+2);
 setobj(L,cb+1,ra+1);
@@ -5238,7 +5608,7 @@ dojump(L,pc,GETARG_sBx(*pc));
 pc++;
 continue;
 }
-case OP_SETLIST:{
+OPCODE_TARGET(SETLIST){
 int n=GETARG_B(i);
 int c=GETARG_C(i);
 int last;
@@ -5260,11 +5630,11 @@ luaC_barriert(L,h,val);
 }
 continue;
 }
-case OP_CLOSE:{
+OPCODE_TARGET(CLOSE){
 luaF_close(L,ra);
 continue;
 }
-case OP_CLOSURE:{
+OPCODE_TARGET(CLOSURE){
 Proto*p;
 Closure*ncl;
 int nup,j;
@@ -5283,7 +5653,7 @@ setclvalue(L,ra,ncl);
 Protect(luaC_checkGC(L));
 continue;
 }
-case OP_VARARG:{
+OPCODE_TARGET(VARARG){
 int b=GETARG_B(i)-1;
 int j;
 CallInfo*ci=L->ci;
@@ -7644,6 +8014,40 @@ luaL_addlstring(&b,buff,strlen(buff));
 luaL_pushresult(&b);
 return 1;
 }
+static int str_replace(lua_State*L){
+size_t srcl,lp,lp2;
+const char*src=luaL_checklstring(L,1,&srcl);
+const char*p=luaL_checklstring(L,2,&lp);
+if(lp==0)//empty str to search
+{
+lua_pushvalue(L,1);
+return 1;
+}
+const char*p2=luaL_checklstring(L,3,&lp2);
+lua_Integer max_s=luaL_optinteger(L,4,srcl+1);
+luaL_Buffer b;
+luaL_buffinit(L,&b);
+lua_Integer n=0,init=0;
+while(1){
+const char*s2=lmemfind(src+init,srcl-init,p,lp);
+if(s2){
+luaL_addlstring(&b,src+init,s2-(src+init));
+luaL_addlstring(&b,p2,lp2);
+init=init+(s2-(src+init))+lp;
+n++;
+if((n>=max_s)){
+luaL_addlstring(&b,src+init,srcl-init);
+break;
+}
+}else{
+luaL_addlstring(&b,src+init,srcl-init);
+break;
+}
+}
+luaL_pushresult(&b);
+lua_pushinteger(L,n);
+return 2;
+}
 static const luaL_Reg strlib[]={
 {"byte",str_byte},
 {"char",str_char},
@@ -7654,6 +8058,7 @@ static const luaL_Reg strlib[]={
 {"lower",str_lower},
 {"match",str_match},
 {"rep",str_rep},
+{"replace",str_replace},
 {"sub",str_sub},
 {"upper",str_upper},
 {NULL,NULL}

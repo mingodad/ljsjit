@@ -24,22 +24,22 @@
 //
 //--------------------------------------------------------------------------
 
-var remove = table.remove
+var remove = table.remove;
 
 return setmetatable({
   flush = function(t) {
-    for( i=#t,1,-1 ) { t[i] = null }
+    for( i=#t,1,-1 ) { t[i] = null; }
   },
   get = function(t) {
-    return t[#t]
+    return t[#t];
   }
 }, {
   __call = function(t, zone) {
     if( zone ) {
-      t[#t+1] = zone
+      t[#t+1] = zone;
     } else {
-      return (assert(remove(t), "empty zone stack"))
+      return (assert(remove(t), "empty zone stack"));
     }
   }
-})
+});
 

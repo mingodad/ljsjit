@@ -2583,7 +2583,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |// Soft-float integer to number conversion.
   |.macro sfi2d, AHI, ALO
-  |.if not FPU
+  |.if ! FPU
   |  beqz ALO, >9			// Handle zero first.
   |.  sra TMP0, ALO, 31
   |  xor TMP1, ALO, TMP0
@@ -2616,7 +2616,7 @@ static void build_subroutines(BuildCtx *ctx)
   |// Soft-float comparison. Equivalent to c.eq.d.
   |// Input: SFARG*. Output: CRET1. Temporaries: AT, TMP0, TMP1.
   |->vm_sfcmpeq:
-  |.if not FPU
+  |.if ! FPU
   |  sll AT, SFARG1HI, 1
   |  sll TMP0, SFARG2HI, 1
   |  or CRET1, SFARG1LO, SFARG2LO
@@ -2648,13 +2648,13 @@ static void build_subroutines(BuildCtx *ctx)
   |// Soft-float comparison. Equivalent to c.ult.d and c.olt.d.
   |// Input: SFARG*. Output: CRET1. Temporaries: AT, TMP0, TMP1, CRET2.
   |->vm_sfcmpult:
-  |.if not FPU
+  |.if ! FPU
   |  b >1
   |.  li CRET2, 1
   |.endif
   |
   |->vm_sfcmpolt:
-  |.if not FPU
+  |.if ! FPU
   |  li CRET2, 0
   |1:
   |  sll AT, SFARG1HI, 1
@@ -2695,7 +2695,7 @@ static void build_subroutines(BuildCtx *ctx)
   |// Soft-float comparison. Equivalent to c.ole.d a, b or c.ole.d b, a.
   |// Input: SFARG*, TMP3. Output: CRET1. Temporaries: AT, TMP0, TMP1.
   |->vm_sfcmpolex:
-  |.if not FPU
+  |.if ! FPU
   |  sll AT, SFARG1HI, 1
   |  sll TMP0, SFARG2HI, 1
   |  or CRET1, SFARG1LO, SFARG2LO
@@ -2736,7 +2736,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.macro sfmin_max, name, intins
   |->vm_sf .. name:
-  |.if JIT and not FPU
+  |.if JIT && ! FPU
   |  move TMP2, ra
   |  bal ->vm_sfcmpolt
   |.  nop
@@ -3423,7 +3423,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |    decode_RDtoRC8 RC, RD
     |   // RA = dst*8, RB = src1*8, RC = num_const*8
     |   addu RB, BASE, RB
-    |.if "label" ~= "none"
+    |.if "label" != "none"
     |   b label
     |.endif
     |.   addu RC, KBASE, RC
@@ -3434,7 +3434,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |    decode_RDtoRC8 RB, RD
     |   // RA = dst*8, RB = num_const*8, RC = src1*8
     |   addu RC, BASE, RC
-    |.if "label" ~= "none"
+    |.if "label" != "none"
     |   b label
     |.endif
     |.   addu RB, KBASE, RB
@@ -3445,7 +3445,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |    decode_RDtoRC8 RC, RD
     |   // RA = dst*8, RB = src1*8, RC = src2*8
     |   addu RB, BASE, RB
-    |.if "label" ~= "none"
+    |.if "label" != "none"
     |   b label
     |.endif
     |.   addu RC, BASE, RC
@@ -3456,14 +3456,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.macro ins_arith, intins, fpins, fpcall, label
     |  ins_arithpre none
     |
-    |.if "label" ~= "none"
+    |.if "label" != "none"
     |label:
     |.endif
     |
     |  lw SFARG1HI, HI(RB)
     |   lw SFARG2HI, HI(RC)
     |
-    |.if "intins" ~= "div"
+    |.if "intins" != "div"
     |
     |  // Check for two integers.
     |  lw SFARG1LO, LO(RB)
@@ -3509,7 +3509,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |3:
     |  ins_next2
     |
-    |.elif not FPU
+    |.elif ! FPU
     |
     |  lw SFARG1LO, LO(RB)
     |   lw SFARG2LO, LO(RC)
@@ -3536,10 +3536,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endif
     |
     |  ins_next1
-    |.if not FPU
+    |.if ! FPU
     |  sw SFRETHI, HI(RA)
     |.endif
-    |.if "intins" ~= "div"
+    |.if "intins" != "div"
     |  b <3
     |.endif
     |.if FPU

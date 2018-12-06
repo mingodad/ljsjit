@@ -12,11 +12,11 @@
 #include <limits.h>
 #include <stddef.h>
 
-#if LUAJIT_LJS
+#ifdef LUAJIT_LJS
   #define LUA_SCRIPT_EXT ".ljs"
 #else
   #define LUA_SCRIPT_EXT ".lua"
-#endif // LUAJIT_LJS
+#endif
 
 /* Default path for loading Lua and C modules with require(). */
 #if defined(_WIN32)

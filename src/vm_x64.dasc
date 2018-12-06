@@ -496,7 +496,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->vm_leave_unw
   |
   |->vm_unwind_rethrow:
-  |.if not X64WIN
+  |.if ! X64WIN
   |  mov CARG1, SAVE_L
   |  mov CARG2d, eax
   |  restoreregs
@@ -1327,7 +1327,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE		// Add frame since C call can throw.
   |  mov SAVE_PC, PC			// Redundant (but a defined value).
-  |.if not X64WIN
+  |.if ! X64WIN
   |  mov CARG2, BASE			// Otherwise: CARG2 == BASE
   |.endif
   |  mov L:CARG1, L:RB
@@ -2747,7 +2747,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, CCSTATE->gpr[1]
   |  mov CARG3, CCSTATE->gpr[2]
   |  mov CARG4, CCSTATE->gpr[3]
-  |.if not X64WIN
+  |.if ! X64WIN
   |  mov CARG5, CCSTATE->gpr[4]
   |  mov CARG6, CCSTATE->gpr[5]
   |.endif
@@ -2756,7 +2756,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  movaps xmm1, CCSTATE->fpr[1]
   |  movaps xmm2, CCSTATE->fpr[2]
   |  movaps xmm3, CCSTATE->fpr[3]
-  |.if not X64WIN
+  |.if ! X64WIN
   |  cmp eax, 4; jbe >5
   |  movaps xmm4, CCSTATE->fpr[4]
   |  movaps xmm5, CCSTATE->fpr[5]
@@ -2769,7 +2769,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |  mov CCSTATE->gpr[0], rax
   |  movaps CCSTATE->fpr[0], xmm0
-  |.if not X64WIN
+  |.if ! X64WIN
   |  mov CCSTATE->gpr[1], rdx
   |  movaps CCSTATE->fpr[1], xmm1
   |.endif
@@ -2935,11 +2935,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  movzx RDd, PC_RD
       |  branchPC RD
       |2:				// NE: Fallthrough to next instruction.
-      |.if not FFI
+      |.if ! FFI
       |3:
       |.endif
     } else {
-      |.if not FFI
+      |.if ! FFI
       |3:
       |.endif
       |2:				// NE: Branch to the target.
@@ -3451,7 +3451,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test byte GCOBJ:RA->gch.marked, LJ_GC_WHITES	// iswhite(v)
     |  jz <1
     |  // Crossed a write barrier. Move the barrier forward.
-    |.if not X64WIN
+    |.if ! X64WIN
     |  mov CARG2, RB
     |  mov RB, BASE			// Save BASE.
     |.else
@@ -4071,7 +4071,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |1:  // Traverse array part.
     |  cmp RCd, TMPRd; jae >5		// Index points after array part?
     |  cmp aword [ITYPE+RC*8], LJ_TNIL; je >4
-    |.if not DUALNUM
+    |.if ! DUALNUM
     |  cvtsi2sd xmm0, RCd
     |.endif
     |  // Copy array slot to returned value.

@@ -54,106 +54,106 @@
 //----------------------------------------------------------------------------
 
 // Cache some library functions and objects.
-var jit = require("jit")
-assert(jit.version_num == 20100, "LuaJIT core/library version mismatch")
-var jutil = require("jit.util")
-var vmdef = require("jit.vmdef")
-var funcinfo, funcbc = jutil.funcinfo, jutil.funcbc
-var traceinfo, traceir, tracek = jutil.traceinfo, jutil.traceir, jutil.tracek
-var tracemc, tracesnap = jutil.tracemc, jutil.tracesnap
-var traceexitstub, ircalladdr = jutil.traceexitstub, jutil.ircalladdr
-var bit = require("bit")
-var band, shr, tohex = bit.band, bit.rshift, bit.tohex
-var sub, gsub, format = string.sub, string.gsub, string.format
-var byte, rep = string.byte, string.rep
-var type, tostring = type, tostring
-var stdout, stderr = io.stdout, io.stderr
+var jit = require("jit");
+assert(jit.version_num == 20100, "LuaJIT core/library version mismatch");
+var jutil = require("jit.util");
+var vmdef = require("jit.vmdef");
+var funcinfo, funcbc = jutil.funcinfo, jutil.funcbc;
+var traceinfo, traceir, tracek = jutil.traceinfo, jutil.traceir, jutil.tracek;
+var tracemc, tracesnap = jutil.tracemc, jutil.tracesnap;
+var traceexitstub, ircalladdr = jutil.traceexitstub, jutil.ircalladdr;
+var bit = require("bit");
+var band, shr, tohex = bit.band, bit.rshift, bit.tohex;
+var sub, gsub, format = string.sub, string.gsub, string.format;
+var byte, rep = string.byte, string.rep;
+var type, tostring = type, tostring;
+var stdout, stderr = io.stdout, io.stderr;
 
 // Load other modules on-demand.
-var bcline, disass
+var bcline, disass;
 
 // Active flag, output file handle and dump mode.
-var active, out, dumpmode
+var active, out, dumpmode;
 
 //----------------------------------------------------------------------------
 
-var symtabmt = { __index = false }
-var symtab = {}
-var nexitsym = 0
+var symtabmt = { __index = false };
+var symtab = {};
+var nexitsym = 0;
 
 // Fill nested symbol table with per-trace exit stub addresses.
 var function fillsymtab_tr(tr, nexit) {
-  var t = {}
-  symtabmt.__index = t
+  var t = {};
+  symtabmt.__index = t;
   if( jit.arch->sub(1, 4) == "mips" ) {
-    t[traceexitstub(tr, 0)] = "exit"
-    return
+    t[traceexitstub(tr, 0)] = "exit";
+    return;
   }
   for( i=0,nexit-1 ) {
-    var addr = traceexitstub(tr, i)
-    if( addr < 0 ) { addr = addr + 2**32 }
-    t[addr] = tostring(i)
+    var addr = traceexitstub(tr, i);
+    if( addr < 0 ) { addr +=   2**32; }
+    t[addr] = tostring(i);
   }
-  var addr = traceexitstub(tr, nexit)
-  if( addr ) { t[addr] = "stack_check" }
+  var addr = traceexitstub(tr, nexit);
+  if( addr ) { t[addr] = "stack_check"; }
 }
 
 // Fill symbol table with trace exit stub addresses.
 var function fillsymtab(tr, nexit) {
-  var t = symtab
+  var t = symtab;
   if( nexitsym == 0 ) {
-    var ircall = vmdef.ircall
+    var ircall = vmdef.ircall;
     for( i=0,#ircall ) {
-      var addr = ircalladdr(i)
+      var addr = ircalladdr(i);
       if( addr != 0 ) {
-	if( addr < 0 ) { addr = addr + 2**32 }
-	t[addr] = ircall[i]
+	if( addr < 0 ) { addr +=   2**32; }
+	t[addr] = ircall[i];
       }
     }
   }
   if( nexitsym == 1000000 ) { // Per-trace exit stubs.
-    fillsymtab_tr(tr, nexit)
+    fillsymtab_tr(tr, nexit);
   } else if( nexit > nexitsym ) { // Shared exit stubs.
     for( i=nexitsym,nexit-1 ) {
-      var addr = traceexitstub(i)
+      var addr = traceexitstub(i);
       if( addr == null ) { // Fall back to per-trace exit stubs.
-	fillsymtab_tr(tr, nexit)
-	setmetatable(symtab, symtabmt)
-	nexit = 1000000
-	break
+	fillsymtab_tr(tr, nexit);
+	setmetatable(symtab, symtabmt);
+	nexit = 1000000;
+	break;
       }
-      if( addr < 0 ) { addr = addr + 2**32 }
-      t[addr] = tostring(i)
+      if( addr < 0 ) { addr +=   2**32; }
+      t[addr] = tostring(i);
     }
-    nexitsym = nexit
+    nexitsym = nexit;
   }
-  return t
+  return t;
 }
 
 var function dumpwrite(s) {
-  out->write(s)
+  out->write(s);
 }
 
 // Disassemble machine code.
 var function dump_mcode(tr) {
-  var info = traceinfo(tr)
-  if( ! info ) { return }
-  var mcode, addr, loop = tracemc(tr)
-  if( ! mcode ) { return }
-  if( ! disass ) { disass = require("jit.dis_"..jit.arch) }
-  if( addr < 0 ) { addr = addr + 2**32 }
-  out->write("---- TRACE ", tr, " mcode ", #mcode, "\n")
-  var ctx = disass.create(mcode, addr, dumpwrite)
-  ctx.hexdump = 0
-  ctx.symtab = fillsymtab(tr, info.nexit)
+  var info = traceinfo(tr);
+  if( ! info ) { return; }
+  var mcode, addr, loop = tracemc(tr);
+  if( ! mcode ) { return; }
+  if( ! disass ) { disass = require("jit.dis_"..jit.arch); }
+  if( addr < 0 ) { addr +=   2**32; }
+  out->write("---- TRACE ", tr, " mcode ", #mcode, "\n");
+  var ctx = disass.create(mcode, addr, dumpwrite);
+  ctx.hexdump = 0;
+  ctx.symtab = fillsymtab(tr, info.nexit);
   if( loop != 0 ) {
-    symtab[addr+loop] = "LOOP"
-    ctx->disass(0, loop)
-    out->write("->LOOP:\n")
-    ctx->disass(loop, #mcode-loop)
-    symtab[addr+loop] = null
+    symtab[addr+loop] = "LOOP";
+    ctx->disass(0, loop);
+    out->write("->LOOP:\n");
+    ctx->disass(loop, #mcode-loop);
+    symtab[addr+loop] = null;
   } else {
-    ctx->disass(0, #mcode)
+    ctx->disass(0, #mcode);
   }
 }
 
@@ -184,7 +184,7 @@ var irtype_text = {
   "i64",
   "u64",
   "sfp",
-}
+};
 
 var colortype_ansi = {
   [0] = "%s",
@@ -211,30 +211,30 @@ var colortype_ansi = {
   "\027[35m%s\027[m",
   "\027[35m%s\027[m",
   "\027[35m%s\027[m",
-}
+};
 
 var function colorize_text(s) {
-  return s
+  return s;
 }
 
 var function colorize_ansi(s, t) {
-  return format(colortype_ansi[t], s)
+  return format(colortype_ansi[t], s);
 }
 
 var irtype_ansi = setmetatable({},
   { __index = function(tab, t) {
-      var s = colorize_ansi(irtype_text[t], t); tab[t] = s; return s; } })
+      var s = colorize_ansi(irtype_text[t], t); tab[t] = s; return s; } });
 
-var html_escape = { ["<"] = "&lt;", [">"] = "&gt;", ["&"] = "&amp;", }
+var html_escape = { ["<"] = "&lt;", [">"] = "&gt;", ["&"] = "&amp;", };
 
 var function colorize_html(s, t) {
-  s = gsub(s, "[<>&]", html_escape)
-  return format('<span class="irt_%s">%s</span>', irtype_text[t], s)
+  s = gsub(s, "[<>&]", html_escape);
+  return format('<span class="irt_%s">%s</span>', irtype_text[t], s);
 }
 
 var irtype_html = setmetatable({},
   { __index = function(tab, t) {
-      var s = colorize_html(irtype_text[t], t); tab[t] = s; return s; } })
+      var s = colorize_html(irtype_text[t], t); tab[t] = s; return s; } });
 
 var header_html = [=[
 <style type="text/css">
@@ -255,353 +255,353 @@ span.irt_udt, span.irt_lud { color: #00c0c0; }
 span.irt_num { color: #4040c0; }
 span.irt_int, span.irt_i8, span.irt_u8, span.irt_i16, span.irt_u16 { color: #b040b0; }
 </style>
-]=]
+]=];
 
-var colorize, irtype
+var colorize, irtype;
 
 // Lookup tables to convert some literals into names.
 var litname = {
   ["SLOAD "] = setmetatable({}, { __index = function(t, mode) {
-    var s = ""
-    if( band(mode, 1) != 0 ) { s = s.."P" }
-    if( band(mode, 2) != 0 ) { s = s.."F" }
-    if( band(mode, 4) != 0 ) { s = s.."T" }
-    if( band(mode, 8) != 0 ) { s = s.."C" }
-    if( band(mode, 16) != 0 ) { s = s.."R" }
-    if( band(mode, 32) != 0 ) { s = s.."I" }
-    t[mode] = s
-    return s
+    var s = "";
+    if( band(mode, 1) != 0 ) { s = s.."P"; }
+    if( band(mode, 2) != 0 ) { s = s.."F"; }
+    if( band(mode, 4) != 0 ) { s = s.."T"; }
+    if( band(mode, 8) != 0 ) { s = s.."C"; }
+    if( band(mode, 16) != 0 ) { s = s.."R"; }
+    if( band(mode, 32) != 0 ) { s = s.."I"; }
+    t[mode] = s;
+    return s;
   }}),
   ["XLOAD "] = { [0] = "", "R", "V", "RV", "U", "RU", "VU", "RVU", },
   ["CONV  "] = setmetatable({}, { __index = function(t, mode) {
-    var s = irtype[band(mode, 31)]
-    s = irtype[band(shr(mode, 5), 31)].."."..s
-    if( band(mode, 0x800) != 0 ) { s = s.." sext" }
-    var c = shr(mode, 14)
-    if( c == 2 ) { s = s.." index" } else if( c == 3 ) { s = s.." check" }
-    t[mode] = s
-    return s
+    var s = irtype[band(mode, 31)];
+    s = irtype[band(shr(mode, 5), 31)].."."..s;
+    if( band(mode, 0x800) != 0 ) { s = s.." sext"; }
+    var c = shr(mode, 14);
+    if( c == 2 ) { s = s.." index"; } else if( c == 3 ) { s = s.." check"; }
+    t[mode] = s;
+    return s;
   }}),
   ["FLOAD "] = vmdef.irfield,
   ["FREF  "] = vmdef.irfield,
   ["FPMATH"] = vmdef.irfpm,
   ["BUFHDR"] = { [0] = "RESET", "APPEND" },
   ["TOSTR "] = { [0] = "INT", "NUM", "CHAR" },
-}
+};
 
 var function ctlsub(c) {
-  if( c == "\n" ) { return "\\n"
-  } else if( c == "\r" ) { return "\\r"
-  } else if( c == "\t" ) { return "\\t"
-  } else { return format("\\%03d", byte(c))
+  if( c == "\n" ) { return "\\n";
+  } else if( c == "\r" ) { return "\\r";
+  } else if( c == "\t" ) { return "\\t";
+  } else { return format("\\%03d", byte(c));
   }
 }
 
 var function fmtfunc(func, pc) {
-  var fi = funcinfo(func, pc)
+  var fi = funcinfo(func, pc);
   if( fi.loc ) {
-    return fi.loc
+    return fi.loc;
   } else if( fi.ffid ) {
-    return vmdef.ffnames[fi.ffid]
+    return vmdef.ffnames[fi.ffid];
   } else if( fi.addr ) {
-    return format("C:%x", fi.addr)
+    return format("C:%x", fi.addr);
   } else {
-    return "(?)"
+    return "(?)";
   }
 }
 
 var function formatk(tr, idx, sn) {
-  var k, t, slot = tracek(tr, idx)
-  var tn = type(k)
-  var s
+  var k, t, slot = tracek(tr, idx);
+  var tn = type(k);
+  var s;
   if( tn == "number" ) {
     if( band(sn || 0, 0x30000) != 0 ) {
-      s = band(sn, 0x20000) != 0 && "contpc" || "ftsz"
+      s = band(sn, 0x20000) != 0 && "contpc" || "ftsz";
     } else if( k == 2**52+2**51 ) {
-      s = "bias"
+      s = "bias";
     } else {
-      s = format(0 < k && k < 0x1p-1026 && "%+a" || "%+.14g", k)
+      s = format(0 < k && k < 0x1p-1026 && "%+a" || "%+.14g", k);
     }
   } else if( tn == "string" ) {
-    s = format(#k > 20 && '"%.20s"~' || '"%s"', gsub(k, "%c", ctlsub))
+    s = format(#k > 20 && '"%.20s"~' || '"%s"', gsub(k, "%c", ctlsub));
   } else if( tn == "function" ) {
-    s = fmtfunc(k)
+    s = fmtfunc(k);
   } else if( tn == "table" ) {
-    s = format("{%p}", k)
+    s = format("{%p}", k);
   } else if( tn == "userdata" ) {
     if( t == 12 ) {
-      s = format("userdata:%p", k)
+      s = format("userdata:%p", k);
     } else {
-      s = format("[%p]", k)
-      if( s == "[NULL]" ) { s = "NULL" }
+      s = format("[%p]", k);
+      if( s == "[NULL]" ) { s = "NULL"; }
     }
   } else if( t == 21 ) { // int64_t
-    s = sub(tostring(k), 1, -3)
-    if( sub(s, 1, 1) != "-" ) { s = "+"..s }
+    s = sub(tostring(k), 1, -3);
+    if( sub(s, 1, 1) != "-" ) { s = "+"..s; }
   } else if( sn == 0x1057fff ) { // SNAP(1, SNAP_FRAME | SNAP_NORESTORE, REF_NIL)
-    return "----" // Special case for LJ_FR2 slot 1.
+    return "----"; // Special case for LJ_FR2 slot 1.
   } else {
-    s = tostring(k) // For primitives.
+    s = tostring(k); // For primitives.
   }
-  s = colorize(format("%-4s", s), t)
+  s = colorize(format("%-4s", s), t);
   if( slot ) {
-    s = format("%s @%d", s, slot)
+    s = format("%s @%d", s, slot);
   }
-  return s
+  return s;
 }
 
 var function printsnap(tr, snap) {
-  var n = 2
+  var n = 2;
   for( s=0,snap[1]-1 ) {
-    var sn = snap[n]
+    var sn = snap[n];
     if( shr(sn, 24) == s ) {
-      n = n + 1
-      var ref = band(sn, 0xffff) - 0x8000 // REF_BIAS
+      n +=   1;
+      var ref = band(sn, 0xffff) - 0x8000; // REF_BIAS
       if( ref < 0 ) {
-	out->write(formatk(tr, ref, sn))
+	out->write(formatk(tr, ref, sn));
       } else if( band(sn, 0x80000) != 0 ) { // SNAP_SOFTFPNUM
-	out->write(colorize(format("%04d/%04d", ref, ref+1), 14))
+	out->write(colorize(format("%04d/%04d", ref, ref+1), 14));
       } else {
-	var m, ot, op1, op2 = traceir(tr, ref)
-	out->write(colorize(format("%04d", ref), band(ot, 31)))
+	var m, ot, op1, op2 = traceir(tr, ref);
+	out->write(colorize(format("%04d", ref), band(ot, 31)));
       }
-      out->write(band(sn, 0x10000) == 0 && " " || "|") // SNAP_FRAME
+      out->write(band(sn, 0x10000) == 0 && " " || "|"); // SNAP_FRAME
     } else {
-      out->write("---- ")
+      out->write("---- ");
     }
   }
-  out->write("]\n")
+  out->write("]\n");
 }
 
 // Dump snapshots (not interleaved with IR).
 var function dump_snap(tr) {
-  out->write("---- TRACE ", tr, " snapshots\n")
+  out->write("---- TRACE ", tr, " snapshots\n");
   for( i=0,1000000000 ) {
-    var snap = tracesnap(tr, i)
-    if( ! snap ) { break }
-    out->write(format("#%-3d %04d [ ", i, snap[0]))
-    printsnap(tr, snap)
+    var snap = tracesnap(tr, i);
+    if( ! snap ) { break; }
+    out->write(format("#%-3d %04d [ ", i, snap[0]));
+    printsnap(tr, snap);
   }
 }
 
 // Return a register name or stack slot for a rid/sp location.
 var function ridsp_name(ridsp, ins) {
-  if( ! disass ) { disass = require("jit.dis_"..jit.arch) }
-  var rid, slot = band(ridsp, 0xff), shr(ridsp, 8)
+  if( ! disass ) { disass = require("jit.dis_"..jit.arch); }
+  var rid, slot = band(ridsp, 0xff), shr(ridsp, 8);
   if( rid == 253 || rid == 254 ) {
-    return (slot == 0 || slot == 255) && " {sink" || format(" {%04d", ins-slot)
+    return (slot == 0 || slot == 255) && " {sink" || format(" {%04d", ins-slot);
   }
-  if( ridsp > 255 ) { return format("[%x]", slot*4) }
-  if( rid < 128 ) { return disass.regname(rid) }
-  return ""
+  if( ridsp > 255 ) { return format("[%x]", slot*4); }
+  if( rid < 128 ) { return disass.regname(rid); }
+  return "";
 }
 
 // Dump CALL* function ref and return optional ctype.
 var function dumpcallfunc(tr, ins) {
-  var ctype
+  var ctype;
   if( ins > 0 ) {
-    var m, ot, op1, op2 = traceir(tr, ins)
+    var m, ot, op1, op2 = traceir(tr, ins);
     if( band(ot, 31) == 0 ) { // nil type means CARG(func, ctype).
-      ins = op1
-      ctype = formatk(tr, op2)
+      ins = op1;
+      ctype = formatk(tr, op2);
     }
   }
   if( ins < 0 ) {
-    out->write(format("[0x%x](", tonumber((tracek(tr, ins)))))
+    out->write(format("[0x%x](", tonumber((tracek(tr, ins)))));
   } else {
-    out->write(format("%04d (", ins))
+    out->write(format("%04d (", ins));
   }
-  return ctype
+  return ctype;
 }
 
 // Recursively gather CALL* args and dump them.
 var function dumpcallargs(tr, ins) {
   if( ins < 0 ) {
-    out->write(formatk(tr, ins))
+    out->write(formatk(tr, ins));
   } else {
-    var m, ot, op1, op2 = traceir(tr, ins)
-    var oidx = 6*shr(ot, 8)
-    var op = sub(vmdef.irnames, oidx+1, oidx+6)
+    var m, ot, op1, op2 = traceir(tr, ins);
+    var oidx = 6*shr(ot, 8);
+    var op = sub(vmdef.irnames, oidx+1, oidx+6);
     if( op == "CARG  " ) {
-      dumpcallargs(tr, op1)
+      dumpcallargs(tr, op1);
       if( op2 < 0 ) {
-	out->write(" ", formatk(tr, op2))
+	out->write(" ", formatk(tr, op2));
       } else {
-	out->write(" ", format("%04d", op2))
+	out->write(" ", format("%04d", op2));
       }
     } else {
-      out->write(format("%04d", ins))
+      out->write(format("%04d", ins));
     }
   }
 }
 
 // Dump IR and interleaved snapshots.
 var function dump_ir(tr, dumpsnap, dumpreg) {
-  var info = traceinfo(tr)
-  if( ! info ) { return }
-  var nins = info.nins
-  out->write("---- TRACE ", tr, " IR\n")
-  var irnames = vmdef.irnames
-  var snapref = 65536
-  var snap, snapno
+  var info = traceinfo(tr);
+  if( ! info ) { return; }
+  var nins = info.nins;
+  out->write("---- TRACE ", tr, " IR\n");
+  var irnames = vmdef.irnames;
+  var snapref = 65536;
+  var snap, snapno;
   if( dumpsnap ) {
-    snap = tracesnap(tr, 0)
-    snapref = snap[0]
-    snapno = 0
+    snap = tracesnap(tr, 0);
+    snapref = snap[0];
+    snapno = 0;
   }
   for( ins=1,nins ) {
     if( ins >= snapref ) {
       if( dumpreg ) {
-	out->write(format("....              SNAP   #%-3d [ ", snapno))
+	out->write(format("....              SNAP   #%-3d [ ", snapno));
       } else {
-	out->write(format("....        SNAP   #%-3d [ ", snapno))
+	out->write(format("....        SNAP   #%-3d [ ", snapno));
       }
-      printsnap(tr, snap)
-      snapno = snapno + 1
-      snap = tracesnap(tr, snapno)
-      snapref = snap && snap[0] || 65536
+      printsnap(tr, snap);
+      snapno +=   1;
+      snap = tracesnap(tr, snapno);
+      snapref = snap && snap[0] || 65536;
     }
-    var m, ot, op1, op2, ridsp = traceir(tr, ins)
-    var oidx, t = 6*shr(ot, 8), band(ot, 31)
-    var op = sub(irnames, oidx+1, oidx+6)
+    var m, ot, op1, op2, ridsp = traceir(tr, ins);
+    var oidx, t = 6*shr(ot, 8), band(ot, 31);
+    var op = sub(irnames, oidx+1, oidx+6);
     if( op == "LOOP  " ) {
       if( dumpreg ) {
-	out->write(format("%04d ------------ LOOP ------------\n", ins))
+	out->write(format("%04d ------------ LOOP ------------\n", ins));
       } else {
-	out->write(format("%04d ------ LOOP ------------\n", ins))
+	out->write(format("%04d ------ LOOP ------------\n", ins));
       }
     } else if( op != "NOP   " && op != "CARG  " &&
 	   (dumpreg || op != "RENAME") ) {
-      var rid = band(ridsp, 255)
+      var rid = band(ridsp, 255);
       if( dumpreg ) {
-	out->write(format("%04d %-6s", ins, ridsp_name(ridsp, ins)))
+	out->write(format("%04d %-6s", ins, ridsp_name(ridsp, ins)));
       } else {
-	out->write(format("%04d ", ins))
+	out->write(format("%04d ", ins));
       }
       out->write(format("%s%s %s %s ",
 		       (rid == 254 || rid == 253) && "}" ||
 		       (band(ot, 128) == 0 && " " || ">"),
 		       band(ot, 64) == 0 && " " || "+",
-		       irtype[t], op))
-      var m1, m2 = band(m, 3), band(m, 3*4)
+		       irtype[t], op));
+      var m1, m2 = band(m, 3), band(m, 3*4);
       if( sub(op, 1, 4) == "CALL" ) {
-	var ctype
+	var ctype;
 	if( m2 == 1*4 ) { // op2 == IRMlit
-	  out->write(format("%-10s  (", vmdef.ircall[op2]))
+	  out->write(format("%-10s  (", vmdef.ircall[op2]));
 	} else {
-	  ctype = dumpcallfunc(tr, op2)
+	  ctype = dumpcallfunc(tr, op2);
 	}
-	if( op1 != -1 ) { dumpcallargs(tr, op1) }
-	out->write(")")
-	if( ctype ) { out->write(" ctype ", ctype) }
+	if( op1 != -1 ) { dumpcallargs(tr, op1); }
+	out->write(")");
+	if( ctype ) { out->write(" ctype ", ctype); }
       } else if( op == "CNEW  " && op2 == -1 ) {
-	out->write(formatk(tr, op1))
+	out->write(formatk(tr, op1));
       } else if( m1 != 3 ) { // op1 != IRMnone
 	if( op1 < 0 ) {
-	  out->write(formatk(tr, op1))
+	  out->write(formatk(tr, op1));
 	} else {
-	  out->write(format(m1 == 0 && "%04d" || "#%-3d", op1))
+	  out->write(format(m1 == 0 && "%04d" || "#%-3d", op1));
 	}
 	if( m2 != 3*4 ) { // op2 != IRMnone
 	  if( m2 == 1*4 ) { // op2 == IRMlit
-	    var litn = litname[op]
+	    var litn = litname[op];
 	    if( litn && litn[op2] ) {
-	      out->write("  ", litn[op2])
+	      out->write("  ", litn[op2]);
 	    } else if( op == "UREFO " || op == "UREFC " ) {
-	      out->write(format("  #%-3d", shr(op2, 8)))
+	      out->write(format("  #%-3d", shr(op2, 8)));
 	    } else {
-	      out->write(format("  #%-3d", op2))
+	      out->write(format("  #%-3d", op2));
 	    }
 	  } else if( op2 < 0 ) {
-	    out->write("  ", formatk(tr, op2))
+	    out->write("  ", formatk(tr, op2));
 	  } else {
-	    out->write(format("  %04d", op2))
+	    out->write(format("  %04d", op2));
 	  }
 	}
       }
-      out->write("\n")
+      out->write("\n");
     }
   }
   if( snap ) {
     if( dumpreg ) {
-      out->write(format("....              SNAP   #%-3d [ ", snapno))
+      out->write(format("....              SNAP   #%-3d [ ", snapno));
     } else {
-      out->write(format("....        SNAP   #%-3d [ ", snapno))
+      out->write(format("....        SNAP   #%-3d [ ", snapno));
     }
-    printsnap(tr, snap)
+    printsnap(tr, snap);
   }
 }
 
 //----------------------------------------------------------------------------
 
-var recprefix = ""
-var recdepth = 0
+var recprefix = "";
+var recdepth = 0;
 
 // Format trace error message.
 var function fmterr(err, info) {
   if( type(err) == "number" ) {
-    if( type(info) == "function" ) { info = fmtfunc(info) }
-    err = format(vmdef.traceerr[err], info)
+    if( type(info) == "function" ) { info = fmtfunc(info); }
+    err = format(vmdef.traceerr[err], info);
   }
-  return err
+  return err;
 }
 
 // Dump trace states.
 var function dump_trace(what, tr, func, pc, otr, oex) {
   if( what == "stop" || (what == "abort" && dumpmode.a) ) {
-    if( dumpmode.i ) { dump_ir(tr, dumpmode.s, dumpmode.r && what == "stop")
-    } else if( dumpmode.s ) { dump_snap(tr) }
-    if( dumpmode.m ) { dump_mcode(tr) }
+    if( dumpmode.i ) { dump_ir(tr, dumpmode.s, dumpmode.r && what == "stop");
+    } else if( dumpmode.s ) { dump_snap(tr); }
+    if( dumpmode.m ) { dump_mcode(tr); }
   }
   if( what == "start" ) {
-    if( dumpmode.H ) { out->write('<pre class="ljdump">\n') }
-    out->write("---- TRACE ", tr, " ", what)
-    if( otr ) { out->write(" ", otr, "/", oex == -1 && "stitch" || oex) }
-    out->write(" ", fmtfunc(func, pc), "\n")
+    if( dumpmode.H ) { out->write('<pre class="ljdump">\n'); }
+    out->write("---- TRACE ", tr, " ", what);
+    if( otr ) { out->write(" ", otr, "/", oex == -1 && "stitch" || oex); }
+    out->write(" ", fmtfunc(func, pc), "\n");
   } else if( what == "stop" || what == "abort" ) {
-    out->write("---- TRACE ", tr, " ", what)
+    out->write("---- TRACE ", tr, " ", what);
     if( what == "abort" ) {
-      out->write(" ", fmtfunc(func, pc), " -- ", fmterr(otr, oex), "\n")
+      out->write(" ", fmtfunc(func, pc), " -- ", fmterr(otr, oex), "\n");
     } else {
-      var info = traceinfo(tr)
-      var link, ltype = info.link, info.linktype
+      var info = traceinfo(tr);
+      var link, ltype = info.link, info.linktype;
       if( link == tr || link == 0 ) {
-	out->write(" -> ", ltype, "\n")
+	out->write(" -> ", ltype, "\n");
       } else if( ltype == "root" ) {
-	out->write(" -> ", link, "\n")
+	out->write(" -> ", link, "\n");
       } else {
-	out->write(" -> ", link, " ", ltype, "\n")
+	out->write(" -> ", link, " ", ltype, "\n");
       }
     }
-    if( dumpmode.H ) { out->write("</pre>\n\n") } else { out->write("\n") }
+    if( dumpmode.H ) { out->write("</pre>\n\n"); } else { out->write("\n"); }
   } else {
-    if( what == "flush" ) { symtab, nexitsym = {}, 0 }
-    out->write("---- TRACE ", what, "\n\n")
+    if( what == "flush" ) { symtab, nexitsym = {}, 0; }
+    out->write("---- TRACE ", what, "\n\n");
   }
-  out->flush()
+  out->flush();
 }
 
 // Dump recorded bytecode.
 var function dump_record(tr, func, pc, depth, callee) {
   if( depth != recdepth ) {
-    recdepth = depth
-    recprefix = rep(" .", depth)
+    recdepth = depth;
+    recprefix = rep(" .", depth);
   }
-  var line
+  var line;
   if( pc >= 0 ) {
-    line = bcline(func, pc, recprefix)
-    if( dumpmode.H ) { line = gsub(line, "[<>&]", html_escape) }
+    line = bcline(func, pc, recprefix);
+    if( dumpmode.H ) { line = gsub(line, "[<>&]", html_escape); }
   } else {
-    line = "0000 "..recprefix.." FUNCC      \n"
-    callee = func
+    line = "0000 "..recprefix.." FUNCC      \n";
+    callee = func;
   }
   if( pc <= 0 ) {
-    out->write(sub(line, 1, -2), "         ; ", fmtfunc(func), "\n")
+    out->write(sub(line, 1, -2), "         ; ", fmtfunc(func), "\n");
   } else {
-    out->write(line)
+    out->write(line);
   }
   if( pc >= 0 && band(funcbc(func, pc), 0xff) < 16 ) { // ORDER BC
-    out->write(bcline(func, pc+1, recprefix)) // Write JMP for cond.
+    out->write(bcline(func, pc+1, recprefix)); // Write JMP for cond.
   }
 }
 
@@ -609,29 +609,29 @@ var function dump_record(tr, func, pc, depth, callee) {
 
 // Dump taken trace exits.
 var function dump_texit(tr, ex, ngpr, nfpr, ...) {
-  out->write("---- TRACE ", tr, " exit ", ex, "\n")
+  out->write("---- TRACE ", tr, " exit ", ex, "\n");
   if( dumpmode.X ) {
-    var regs = {...}
+    var regs = {...};
     if( jit.arch == "x64" ) {
       for( i=1,ngpr ) {
-	out->write(format(" %016x", regs[i]))
-	if( i % 4 == 0 ) { out->write("\n") }
+	out->write(format(" %016x", regs[i]));
+	if( i % 4 == 0 ) { out->write("\n"); }
       }
     } else {
       for( i=1,ngpr ) {
-	out->write(" ", tohex(regs[i]))
-	if( i % 8 == 0 ) { out->write("\n") }
+	out->write(" ", tohex(regs[i]));
+	if( i % 8 == 0 ) { out->write("\n"); }
       }
     }
     if( jit.arch == "mips" || jit.arch == "mipsel" ) {
       for( i=1,nfpr,2 ) {
-	out->write(format(" %+17.14g", regs[ngpr+i]))
-	if( i % 8 == 7 ) { out->write("\n") }
+	out->write(format(" %+17.14g", regs[ngpr+i]));
+	if( i % 8 == 7 ) { out->write("\n"); }
       }
     } else {
       for( i=1,nfpr ) {
-	out->write(format(" %+17.14g", regs[ngpr+i]))
-	if( i % 4 == 0 ) { out->write("\n") }
+	out->write(format(" %+17.14g", regs[ngpr+i]));
+	if( i % 4 == 0 ) { out->write("\n"); }
       }
     }
   }
@@ -642,65 +642,65 @@ var function dump_texit(tr, ex, ngpr, nfpr, ...) {
 // Detach dump handlers.
 var function dumpoff() {
   if( active ) {
-    active = false
-    jit.attach(dump_texit)
-    jit.attach(dump_record)
-    jit.attach(dump_trace)
-    if( out && out != stdout && out != stderr ) { out->close() }
-    out = null
+    active = false;
+    jit.attach(dump_texit);
+    jit.attach(dump_record);
+    jit.attach(dump_trace);
+    if( out && out != stdout && out != stderr ) { out->close(); }
+    out = null;
   }
 }
 
 // Open the output file and attach dump handlers.
 var function dumpon(opt, outfile) {
-  if( active ) { dumpoff() }
+  if( active ) { dumpoff(); }
 
-  var term = os.getenv("TERM")
-  var colormode = (term && term->match("color") || os.getenv("COLORTERM")) && "A" || "T"
+  var term = os.getenv("TERM");
+  var colormode = (term && term->match("color") || os.getenv("COLORTERM")) && "A" || "T";
   if( opt ) {
-    opt = gsub(opt, "[TAH]", function(mode) { colormode = mode; return ""; })
+    opt = gsub(opt, "[TAH]", function(mode) { colormode = mode; return ""; });
   }
 
-  var m = { t=true, b=true, i=true, m=true, }
+  var m = { t=true, b=true, i=true, m=true, };
   if( opt && opt != "" ) {
-    var o = sub(opt, 1, 1)
-    if( o != "+" && o != "-" ) { m = {} }
-    for( i=1,#opt ) { m[sub(opt, i, i)] = (o != "-") }
+    var o = sub(opt, 1, 1);
+    if( o != "+" && o != "-" ) { m = {}; }
+    for( i=1,#opt ) { m[sub(opt, i, i)] = (o != "-"); }
   }
-  dumpmode = m
+  dumpmode = m;
 
   if( m.t || m.b || m.i || m.s || m.m ) {
-    jit.attach(dump_trace, "trace")
+    jit.attach(dump_trace, "trace");
   }
   if( m.b ) {
-    jit.attach(dump_record, "record")
-    if( ! bcline ) { bcline = require("jit.bc").line }
+    jit.attach(dump_record, "record");
+    if( ! bcline ) { bcline = require("jit.bc").line; }
   }
   if( m.x || m.X ) {
-    jit.attach(dump_texit, "texit")
+    jit.attach(dump_texit, "texit");
   }
 
-  if( ! outfile ) { outfile = os.getenv("LUAJIT_DUMPFILE") }
+  if( ! outfile ) { outfile = os.getenv("LUAJIT_DUMPFILE"); }
   if( outfile ) {
-    out = outfile == "-" && stdout || assert(io.open(outfile, "w"))
+    out = outfile == "-" && stdout || assert(io.open(outfile, "w"));
   } else {
-    out = stdout
+    out = stdout;
   }
 
-  m[colormode] = true
+  m[colormode] = true;
   if( colormode == "A" ) {
-    colorize = colorize_ansi
-    irtype = irtype_ansi
+    colorize = colorize_ansi;
+    irtype = irtype_ansi;
   } else if( colormode == "H" ) {
-    colorize = colorize_html
-    irtype = irtype_html
-    out->write(header_html)
+    colorize = colorize_html;
+    irtype = irtype_html;
+    out->write(header_html);
   } else {
-    colorize = colorize_text
-    irtype = irtype_text
+    colorize = colorize_text;
+    irtype = irtype_text;
   }
 
-  active = true
+  active = true;
 }
 
 // Public module functions.
@@ -708,5 +708,5 @@ return {
   on = dumpon,
   off = dumpoff,
   start = dumpon // For -j command line option.
-}
+};
 

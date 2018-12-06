@@ -12,13 +12,13 @@
 // NYI: VMX, VMX128
 //----------------------------------------------------------------------------
 
-var type = type
-var byte, format = string.byte, string.format
-var match, gmatch, gsub = string.match, string.gmatch, string.gsub
-var concat = table.concat
-var bit = require("bit")
-var band, bor, tohex = bit.band, bit.bor, bit.tohex
-var lshift, rshift, arshift = bit.lshift, bit.rshift, bit.arshift
+var type = type;
+var byte, format = string.byte, string.format;
+var match, gmatch, gsub = string.match, string.gmatch, string.gsub;
+var concat = table.concat;
+var bit = require("bit");
+var band, bor, tohex = bit.band, bit.bor, bit.tohex;
+var lshift, rshift, arshift = bit.lshift, bit.rshift, bit.arshift;
 
 //----------------------------------------------------------------------------
 // Primary and extended opcode maps
@@ -33,24 +33,24 @@ var map_crops = {
   [417] = "crorcCCC", [449] = "cror|crmoveCCC=",
   [16] = "b_lrKB", [528] = "b_ctrKB",
   [150] = "isync",
-}
+};
 
 var map_rlwinm = setmetatable({
   shift = 0, mask = -1,
 },
 { __index = function(t, x) {
-    var rot = band(rshift(x, 11), 31)
-    var mb = band(rshift(x, 6), 31)
-    var me = band(rshift(x, 1), 31)
+    var rot = band(rshift(x, 11), 31);
+    var mb = band(rshift(x, 6), 31);
+    var me = band(rshift(x, 1), 31);
     if( mb == 0 && me == 31-rot ) {
-      return "slwiRR~A."
+      return "slwiRR~A.";
     } else if( me == 31 && mb == 32-rot ) {
-      return "srwiRR~-A."
+      return "srwiRR~-A.";
     } else {
-      return "rlwinmRR~AAA."
+      return "rlwinmRR~AAA.";
     }
   }
-})
+});
 
 var map_rld = {
   shift = 2, mask = 7,
@@ -59,7 +59,7 @@ var map_rld = {
     shift = 1, mask = 1,
     [0] = "rldclRR~RM.", "rldcrRR~RM.",
   },
-}
+};
 
 var map_ext = setmetatable({
   shift = 1, mask = 1023,
@@ -167,19 +167,19 @@ var map_ext = setmetatable({
   [539] = "srdRR~R.",
 },
 { __index = function(t, x) {
-    if( band(x, 31) == 15 ) { return "iselRRRC" }
+    if( band(x, 31) == 15 ) { return "iselRRRC"; }
   }
-})
+});
 
 var map_ld = {
   shift = 0, mask = 3,
   [0] = "ldRRE", "lduRRE", "lwaRRE",
-}
+};
 
 var map_std = {
   shift = 0, mask = 3,
   [0] = "stdRRE", "stduRRE",
-}
+};
 
 var map_fps = {
   shift = 5, mask = 1,
@@ -190,7 +190,7 @@ var map_fps = {
     "fresF-F.", "fmulsFF-F.", "frsqrtesF-F.", false,
     "fmsubsFFFF~.", "fmaddsFFFF~.", "fnmsubsFFFF~.", "fnmaddsFFFF~.",
   }
-}
+};
 
 var map_fpd = {
   shift = 5, mask = 1,
@@ -214,7 +214,7 @@ var map_fpd = {
     "freF-F.", "fmulFF-F.", "frsqrteF-F.", false,
     "fmsubFFFF~.", "fmaddFFFF~.", "fnmsubFFFF~.", "fnmaddFFFF~.",
   }
-}
+};
 
 var map_spe = {
   shift = 0, mask = 2047,
@@ -351,7 +351,7 @@ var map_spe = {
   [1480] = "evmwlumianwRRR", [1481] = "evmwlsmianwRRR",
   [1491] = "evmwssfanRRR", [1496] = "evmwumianRRR",
   [1497] = "evmwsmianRRR", [1499] = "evmwsmfanRRR",
-}
+};
 
 var map_pri = {
   [0] = false,	false,		"tdiARI",	"twiARI",
@@ -370,7 +370,7 @@ var map_pri = {
   "stfsFRD",	"stfsuFRD",	"stfdFRD",	"stfduFRD",
   false,	false,		map_ld,		map_fps,
   false,	false,		map_std,	map_fpd,
-}
+};
 
 //----------------------------------------------------------------------------
 
@@ -379,16 +379,16 @@ var map_gpr = {
   "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
   "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
   "r24", "r25", "r26", "r27", "r28", "r29", "r30", "r31",
-}
+};
 
-var map_cond = { [0] = "lt", "gt", "eq", "so", "ge", "le", "ne", "ns", }
+var map_cond = { [0] = "lt", "gt", "eq", "so", "ge", "le", "ne", "ns", };
 
 // Format a condition bit.
 var function condfmt(cond) {
   if( cond <= 3 ) {
-    return map_cond[band(cond, 3)]
+    return map_cond[band(cond, 3)];
   } else {
-    return format("4*cr%d+%s", rshift(cond, 2), map_cond[band(cond, 3)])
+    return format("4*cr%d+%s", rshift(cond, 2), map_cond[band(cond, 3)]);
   }
 }
 
@@ -396,190 +396,190 @@ var function condfmt(cond) {
 
 // Output a nicely formatted line with an opcode and operands.
 var function putop(ctx, text, operands) {
-  var pos = ctx.pos
-  var extra = ""
+  var pos = ctx.pos;
+  var extra = "";
   if( ctx.rel ) {
-    var sym = ctx.symtab[ctx.rel]
-    if( sym ) { extra = "\t->"..sym }
+    var sym = ctx.symtab[ctx.rel];
+    if( sym ) { extra = "\t->"..sym; }
   }
   if( ctx.hexdump > 0 ) {
     ctx.out(format("%08x  %s  %-7s %s%s\n",
-	    ctx.addr+pos, tohex(ctx.op), text, concat(operands, ", "), extra))
+	    ctx.addr+pos, tohex(ctx.op), text, concat(operands, ", "), extra));
   } else {
     ctx.out(format("%08x  %-7s %s%s\n",
-	    ctx.addr+pos, text, concat(operands, ", "), extra))
+	    ctx.addr+pos, text, concat(operands, ", "), extra));
   }
-  ctx.pos = pos + 4
+  ctx.pos = pos + 4;
 }
 
 // Fallback for unknown opcodes.
 var function unknown(ctx) {
-  return putop(ctx, ".long", { "0x"..tohex(ctx.op) })
+  return putop(ctx, ".long", { "0x"..tohex(ctx.op) });
 }
 
 // Disassemble a single instruction.
 var function disass_ins(ctx) {
-  var pos = ctx.pos
-  var b0, b1, b2, b3 = byte(ctx.code, pos+1, pos+4)
-  var op = bor(lshift(b0, 24), lshift(b1, 16), lshift(b2, 8), b3)
-  var operands = {}
-  var last = null
-  var rs = 21
-  ctx.op = op
-  ctx.rel = null
+  var pos = ctx.pos;
+  var b0, b1, b2, b3 = byte(ctx.code, pos+1, pos+4);
+  var op = bor(lshift(b0, 24), lshift(b1, 16), lshift(b2, 8), b3);
+  var operands = {};
+  var last = null;
+  var rs = 21;
+  ctx.op = op;
+  ctx.rel = null;
 
-  var opat = map_pri[rshift(b0, 2)]
-  while ( type(opat) != "string" ) {
-    if( ! opat ) { return unknown(ctx) }
-    opat = opat[band(rshift(op, opat.shift), opat.mask)]
+  var opat = map_pri[rshift(b0, 2)];
+  while( type(opat) != "string" ) {
+    if( ! opat ) { return unknown(ctx); }
+    opat = opat[band(rshift(op, opat.shift), opat.mask)];
   }
-  var name, pat = match(opat, "^([a-z0-9_.]*)(.*)")
-  var altname, pat2 = match(pat, "|([a-z0-9_.]*)(.*)")
-  if( altname ) { pat = pat2 }
+  var name, pat = match(opat, "^([a-z0-9_.]*)(.*)");
+  var altname, pat2 = match(pat, "|([a-z0-9_.]*)(.*)");
+  if( altname ) { pat = pat2; }
 
   for( p in gmatch(pat, ".") ) {
-    var x = null
+    var x = null;
     if( p == "R" ) {
-      x = map_gpr[band(rshift(op, rs), 31)]
-      rs = rs - 5
+      x = map_gpr[band(rshift(op, rs), 31)];
+      rs -=   5;
     } else if( p == "F" ) {
-      x = "f"..band(rshift(op, rs), 31)
-      rs = rs - 5
+      x = "f"..band(rshift(op, rs), 31);
+      rs -=   5;
     } else if( p == "A" ) {
-      x = band(rshift(op, rs), 31)
-      rs = rs - 5
+      x = band(rshift(op, rs), 31);
+      rs -=   5;
     } else if( p == "S" ) {
-      x = arshift(lshift(op, 27-rs), 27)
-      rs = rs - 5
+      x = arshift(lshift(op, 27-rs), 27);
+      rs -=   5;
     } else if( p == "I" ) {
-      x = arshift(lshift(op, 16), 16)
+      x = arshift(lshift(op, 16), 16);
     } else if( p == "U" ) {
-      x = band(op, 0xffff)
+      x = band(op, 0xffff);
     } else if( p == "D" || p == "E" ) {
-      var disp = arshift(lshift(op, 16), 16)
-      if( p == "E" ) { disp = band(disp, -4) }
-      if( last == "r0" ) { last = "0" }
-      operands[#operands] = format("%d(%s)", disp, last)
+      var disp = arshift(lshift(op, 16), 16);
+      if( p == "E" ) { disp = band(disp, -4); }
+      if( last == "r0" ) { last = "0"; }
+      operands[#operands] = format("%d(%s)", disp, last);
     } else if( p >= "2" && p <= "8" ) {
-      var disp = band(rshift(op, rs), 31) * p
-      if( last == "r0" ) { last = "0" }
-      operands[#operands] = format("%d(%s)", disp, last)
+      var disp = band(rshift(op, rs), 31) * p;
+      if( last == "r0" ) { last = "0"; }
+      operands[#operands] = format("%d(%s)", disp, last);
     } else if( p == "H" ) {
-      x = band(rshift(op, rs), 31) + lshift(band(op, 2), 4)
-      rs = rs - 5
+      x = band(rshift(op, rs), 31) + lshift(band(op, 2), 4);
+      rs -=   5;
     } else if( p == "M" ) {
-      x = band(rshift(op, rs), 31) + band(op, 0x20)
+      x = band(rshift(op, rs), 31) + band(op, 0x20);
     } else if( p == "C" ) {
-      x = condfmt(band(rshift(op, rs), 31))
-      rs = rs - 5
+      x = condfmt(band(rshift(op, rs), 31));
+      rs -=   5;
     } else if( p == "B" ) {
-      var bo = rshift(op, 21)
-      var cond = band(rshift(op, 16), 31)
-      var cn = ""
-      rs = rs - 10
+      var bo = rshift(op, 21);
+      var cond = band(rshift(op, 16), 31);
+      var cn = "";
+      rs -=   10;
       if( band(bo, 4) == 0 ) {
-	cn = band(bo, 2) == 0 && "dnz" || "dz"
+	cn = band(bo, 2) == 0 && "dnz" || "dz";
 	if( band(bo, 0x10) == 0 ) {
-	  cn = cn..(band(bo, 8) == 0 && "f" || "t")
+	  cn = cn..(band(bo, 8) == 0 && "f" || "t");
 	}
-	if( band(bo, 0x10) == 0 ) { x = condfmt(cond) }
-	name = name..(band(bo, 1) == band(rshift(op, 15), 1) && "-" || "+")
+	if( band(bo, 0x10) == 0 ) { x = condfmt(cond); }
+	name = name..(band(bo, 1) == band(rshift(op, 15), 1) && "-" || "+");
       } else if( band(bo, 0x10) == 0 ) {
-	cn = map_cond[band(cond, 3) + (band(bo, 8) == 0 && 4 || 0)]
-	if( cond > 3 ) { x = "cr"..rshift(cond, 2) }
-	name = name..(band(bo, 1) == band(rshift(op, 15), 1) && "-" || "+")
+	cn = map_cond[band(cond, 3) + (band(bo, 8) == 0 && 4 || 0)];
+	if( cond > 3 ) { x = "cr"..rshift(cond, 2); }
+	name = name..(band(bo, 1) == band(rshift(op, 15), 1) && "-" || "+");
       }
-      name = gsub(name, "_", cn)
+      name = gsub(name, "_", cn);
     } else if( p == "J" ) {
-      x = arshift(lshift(op, 27-rs), 29-rs)*4
-      if( band(op, 2) == 0 ) { x = ctx.addr + pos + x }
-      ctx.rel = x
-      x = "0x"..tohex(x)
+      x = arshift(lshift(op, 27-rs), 29-rs)*4;
+      if( band(op, 2) == 0 ) { x = ctx.addr + pos + x; }
+      ctx.rel = x;
+      x = "0x"..tohex(x);
     } else if( p == "K" ) {
-      if( band(op, 1) != 0 ) { name = name.."l" }
-      if( band(op, 2) != 0 ) { name = name.."a" }
+      if( band(op, 1) != 0 ) { name = name.."l"; }
+      if( band(op, 2) != 0 ) { name = name.."a"; }
     } else if( p == "X" || p == "Y" ) {
-      x = band(rshift(op, rs+2), 7)
-      if( x == 0 && p == "Y" ) { x = null } else { x = "cr"..x }
-      rs = rs - 5
+      x = band(rshift(op, rs+2), 7);
+      if( x == 0 && p == "Y" ) { x = null; } else { x = "cr"..x; }
+      rs -=   5;
     } else if( p == "W" ) {
-      x = "cr"..band(op, 7)
+      x = "cr"..band(op, 7);
     } else if( p == "Z" ) {
-      x = band(rshift(op, rs-4), 255)
-      rs = rs - 10
+      x = band(rshift(op, rs-4), 255);
+      rs -=   10;
     } else if( p == ">" ) {
-      operands[#operands] = rshift(operands[#operands], 1)
+      operands[#operands] = rshift(operands[#operands], 1);
     } else if( p == "0" ) {
       if( last == "r0" ) {
-	operands[#operands] = null
-	if( altname ) { name = altname }
+	operands[#operands] = null;
+	if( altname ) { name = altname; }
       }
     } else if( p == "L" ) {
-      name = gsub(name, "_", band(op, 0x00200000) != 0 && "d" || "w")
+      name = gsub(name, "_", band(op, 0x00200000) != 0 && "d" || "w");
     } else if( p == "." ) {
-      if( band(op, 1) == 1 ) { name = name.."." }
+      if( band(op, 1) == 1 ) { name = name.."."; }
     } else if( p == "N" ) {
-      if( op == 0x60000000 ) { name = "nop"; break }
+      if( op == 0x60000000 ) { name = "nop"; break; }
     } else if( p == "~" ) {
-      var n = #operands
-      operands[n-1],  operands[n] = operands[n], operands[n-1]
+      var n = #operands;
+      operands[n-1],  operands[n] = operands[n], operands[n-1];
     } else if( p == "=" ) {
-      var n = #operands
+      var n = #operands;
       if( last == operands[n-1] ) {
-	operands[n] = null
-	name = altname
+	operands[n] = null;
+	name = altname;
       }
     } else if( p == "%" ) {
-      var n = #operands
+      var n = #operands;
       if( last == operands[n-1] && last == operands[n-2] ) {
-	operands[n] = null
-	operands[n-1] = null
-	name = altname
+	operands[n] = null;
+	operands[n-1] = null;
+	name = altname;
       }
     } else if( p == "-" ) {
-      rs = rs - 5
+      rs -=   5;
     } else {
-      assert(false)
+      assert(false);
     }
-    if( x ) { operands[#operands+1] = x; last = x }
+    if( x ) { operands[#operands+1] = x; last = x; }
   }
 
-  return putop(ctx, name, operands)
+  return putop(ctx, name, operands);
 }
 
 //----------------------------------------------------------------------------
 
 // Disassemble a block of code.
 var function disass_block(ctx, ofs, len) {
-  if( ! ofs ) { ofs = 0 }
-  var stop = len && ofs+len || #ctx.code
-  stop = stop - stop % 4
-  ctx.pos = ofs - ofs % 4
-  ctx.rel = null
-  while ( ctx.pos < stop ) { disass_ins(ctx) }
+  if( ! ofs ) { ofs = 0; }
+  var stop = len && ofs+len || #ctx.code;
+  stop -=   stop % 4;
+  ctx.pos = ofs - ofs % 4;
+  ctx.rel = null;
+  while( ctx.pos < stop ) { disass_ins(ctx); }
 }
 
 // Extended API: create a disassembler context. Then call ctx:disass(ofs, len).
 var function create(code, addr, out) {
-  var ctx = {}
-  ctx.code = code
-  ctx.addr = addr || 0
-  ctx.out = out || io.write
-  ctx.symtab = {}
-  ctx.disass = disass_block
-  ctx.hexdump = 8
-  return ctx
+  var ctx = {};
+  ctx.code = code;
+  ctx.addr = addr || 0;
+  ctx.out = out || io.write;
+  ctx.symtab = {};
+  ctx.disass = disass_block;
+  ctx.hexdump = 8;
+  return ctx;
 }
 
 // Simple API: disassemble code (a string) at address and output via out.
 var function disass(code, addr, out) {
-  create(code, addr, out)->disass()
+  create(code, addr, out)->disass();
 }
 
 // Return register name for RID.
 var function regname(r) {
-  if( r < 32 ) { return map_gpr[r] }
-  return "f"..(r-32)
+  if( r < 32 ) { return map_gpr[r]; }
+  return "f"..(r-32);
 }
 
 // Public module functions.
@@ -587,5 +587,5 @@ return {
   create = create,
   disass = disass,
   regname = regname
-}
+};
 

@@ -8,10 +8,10 @@
 // x86/x64 disassembler module. All the interesting stuff is there.
 //----------------------------------------------------------------------------
 
-var dis_x86 = require((string.match(..., ".*%.") || "").."dis_x86")
+var dis_x86 = require((string.match(..., ".*%.") || "").."dis_x86");
 return {
   create = dis_x86.create64,
   disass = dis_x86.disass64,
   regname = dis_x86.regname64
-}
+};
 

@@ -26,7 +26,7 @@
 |// Fixed register assignments for the interpreter.
 |// This is very fragile and has many dependencies. Caveat emptor.
 |.define BASE,		edx		// Not C callee-save, refetched anyway.
-|.if not X64
+|.if ! X64
 |.define KBASE,		edi		// Must be C callee-save.
 |.define KBASEa,	KBASE
 |.define PC,		esi		// Must be C callee-save.
@@ -70,7 +70,7 @@
 |.define RDa, RD
 |.endif
 |
-|.if not X64
+|.if ! X64
 |.define FCARG1,	ecx		// x86 fastcall arguments.
 |.define FCARG2,	edx
 |.elif X64WIN
@@ -119,7 +119,7 @@
 |
 |// Stack layout while in interpreter. Must match with lj_frame.h.
 |//-----------------------------------------------------------------------
-|.if not X64		// x86 stack layout.
+|.if ! X64		// x86 stack layout.
 |
 |.if WIN
 |
@@ -616,7 +616,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->vm_leave_unw
   |
   |->vm_unwind_rethrow:
-  |.if X64 and not X64WIN
+  |.if X64 && ! X64WIN
   |  mov FCARG1, SAVE_L
   |  mov FCARG2, eax
   |  restoreregs
@@ -648,7 +648,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  set_vmstate INTERP
   |  jmp ->vm_returnc			// Increments RD/MULTRES and returns.
   |
-  |.if WIN and not X64
+  |.if WIN && ! X64
   |->vm_rtlunwind@16:			// Thin layer around RtlUnwind.
   |  // (void *cframe, void *excptrec, void *unwinder, int errcode)
   |  mov [esp], FCARG1			// Return value for RtlUnwind.
@@ -1650,7 +1650,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE		// Add frame since C call can throw.
   |  mov SAVE_PC, PC			// Redundant (but a defined value).
-  |.if X64 and not X64WIN
+  |.if X64 && ! X64WIN
   |  mov FCARG2, BASE			// Otherwise: FCARG2 == BASE
   |.endif
   |  mov L:FCARG1, L:RB
@@ -2030,7 +2030,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |//-- Math library -------------------------------------------------------
   |
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |->fff_resi:  // Dummy.
   |.endif
   |
@@ -2133,7 +2133,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp NARGS:RD, 1+1; jne ->fff_fallback	// Exactly one argument.
   |  cmp dword [BASE+4], LJ_TISNUM; jae ->fff_fallback
   |  movsd xmm0, qword [BASE]
-  |.if not X64
+  |.if ! X64
   |  movsd FPARG1, xmm0
   |.endif
   |  mov RB, BASE
@@ -2143,7 +2143,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.macro math_extern, func
   |  .ffunc_nsse math_ .. func
-  |.if not X64
+  |.if ! X64
   |  movsd FPARG1, xmm0
   |.endif
   |  mov RB, BASE
@@ -2154,7 +2154,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.macro math_extern2, func
   |  .ffunc_nnsse math_ .. func
-  |.if not X64
+  |.if ! X64
   |  movsd FPARG1, xmm0
   |  movsd FPARG3, xmm1
   |.endif
@@ -2974,7 +2974,7 @@ static void build_subroutines(BuildCtx *ctx)
   |// and from JIT code. arg/ret is xmm0. xmm0-xmm3 and RD (eax) modified.
   |.macro vm_round, name, mode, cond
   |->name:
-  |.if not X64 and cond
+  |.if ! X64 && cond
   |  movsd xmm0, qword [esp+4]
   |  call ->name .. _sse
   |  movsd qword [esp+4], xmm0  // Overwrite callee-owned arg.
@@ -3152,7 +3152,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_ffi_callback:
   |.if FFI
   |.type CTSTATE, CTState, PC
-  |.if not X64
+  |.if ! X64
   |  sub esp, 16			// Leave room for SAVE_ERRF etc.
   |.endif
   |  saveregs_	// ebp/rbp already saved. ebp now holds global_State *.
@@ -3289,7 +3289,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, CCSTATE->gpr[1]
   |  mov CARG3, CCSTATE->gpr[2]
   |  mov CARG4, CCSTATE->gpr[3]
-  |.if not X64WIN
+  |.if ! X64WIN
   |  mov CARG5, CCSTATE->gpr[4]
   |  mov CARG6, CCSTATE->gpr[5]
   |.endif
@@ -3298,7 +3298,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  movaps xmm1, CCSTATE->fpr[1]
   |  movaps xmm2, CCSTATE->fpr[2]
   |  movaps xmm3, CCSTATE->fpr[3]
-  |.if not X64WIN
+  |.if ! X64WIN
   |  cmp eax, 4; jbe >5
   |  movaps xmm4, CCSTATE->fpr[4]
   |  movaps xmm5, CCSTATE->fpr[5]
@@ -3316,7 +3316,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.if X64
   |  mov CCSTATE->gpr[0], rax
   |  movaps CCSTATE->fpr[0], xmm0
-  |.if not X64WIN
+  |.if ! X64WIN
   |  mov CCSTATE->gpr[1], rdx
   |  movaps CCSTATE->fpr[1], xmm1
   |.endif
@@ -3493,11 +3493,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  movzx RD, PC_RD
       |  branchPC RD
       |2:				// NE: Fallthrough to next instruction.
-      |.if not FFI
+      |.if ! FFI
       |3:
       |.endif
     } else {
-      |.if not FFI
+      |.if ! FFI
       |3:
       |.endif
       |2:				// NE: Branch to the target.
@@ -3884,7 +3884,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_POW:
     |  ins_arithpre movsd, xmm1
     |  mov RB, BASE
-    |.if not X64
+    |.if ! X64
     |  movsd FPARG1, xmm0
     |  movsd FPARG3, xmm1
     |.endif
@@ -4039,7 +4039,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test byte GCOBJ:RA->gch.marked, LJ_GC_WHITES	// iswhite(v)
     |  jz <1
     |  // Crossed a write barrier. Move the barrier forward.
-    |.if X64 and not X64WIN
+    |.if X64 && ! X64WIN
     |  mov FCARG2, RB
     |  mov RB, BASE			// Save BASE.
     |.else

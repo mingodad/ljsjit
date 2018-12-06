@@ -289,7 +289,7 @@
 |.endmacro
 |
 |.macro saveregs
-|.if GPR64 and not FRAME32
+|.if GPR64 && ! FRAME32
 |  stdu sp, -CFRAME_SPACE(sp)
 |.else
 |  stwu sp, -CFRAME_SPACE(sp)
@@ -297,7 +297,7 @@
 |  save_ 14; save_ 15; save_ 16
 |  mflr r0
 |  save_ 17; save_ 18; save_ 19; save_ 20; save_ 21; save_ 22
-|.if GPR64 and not FRAME32
+|.if GPR64 && ! FRAME32
 |  std r0, SAVE_LR
 |.else
 |  stw r0, SAVE_LR
@@ -314,7 +314,7 @@
 |.endmacro
 |
 |.macro restoreregs
-|.if GPR64 and not FRAME32
+|.if GPR64 && ! FRAME32
 |  ld r0, SAVE_LR
 |.else
 |  lwz r0, SAVE_LR
@@ -932,7 +932,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  b >1
   |
   |->vmeta_tgetb:			// TMP0 = index
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |  tonum_u f0, TMP0
   |.endif
   |   decode_RB8 RB, INS
@@ -1023,7 +1023,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  b >1
   |
   |->vmeta_tsetb:			// TMP0 = index
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |  tonum_u f0, TMP0
   |.endif
   |   decode_RB8 RB, INS
@@ -1659,7 +1659,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |   lwz TMP0, TAB:CARG1->asize
   |   lwz TMP1, TAB:CARG1->array
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |  fadd FARG2, FARG2, FARG1
   |.endif
   |  addi TMP2, TMP2, 1
@@ -2208,7 +2208,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  blex frexp
   |   lwz TMP1, DISPATCH_GL(tmptv)(DISPATCH)
   |   la RA, -8(BASE)
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |   tonum_i FARG2, TMP1
   |.endif
   |.if FPU
@@ -2434,7 +2434,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ffgccheck
   |  cmplwi NARGS8:RC, 16
   |   lwz CARG3, 16(BASE)
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |    lfd f0, 16(BASE)
   |.endif
   |   lwz TMP0, 0(BASE)
@@ -2461,7 +2461,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  checknum CARG2; bge ->fff_fallback
   |.endif
   |  checkstr TMP0; bne ->fff_fallback
-  |.if not DUALNUM
+  |.if ! DUALNUM
   |   toint TMP1, f1
   |.endif
   |   lwz TMP0, STR:CARG1->len
@@ -3102,7 +3102,7 @@ static void build_subroutines(BuildCtx *ctx)
   |// NYI: Use internal implementations of floor, ceil, trunc, sfcmp.
   |
   |.macro sfi2d, AHI, ALO
-  |.if not FPU
+  |.if ! FPU
   |  mr. AHI, ALO
   |  bclr 12, 2				// Handle zero first.
   |  srawi TMP0, ALO, 31
@@ -3159,7 +3159,7 @@ static void build_subroutines(BuildCtx *ctx)
   |// Flush D-Cache and invalidate I-Cache. Assumes 32 byte cache line size.
   |// This is a good lower bound, except for very ancient PPC models.
   |->vm_cachesync:
-  |.if JIT or FFI
+  |.if JIT || FFI
   |  // Compute start of first cache line and number of cache lines.
   |  rlwinm CARG1, CARG1, 0, 0, 26
   |  sub CARG2, CARG2, CARG1
@@ -3481,7 +3481,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |.endif
     |5:  // Either or both types are not numbers.
-    |.if not DUALNUM
+    |.if ! DUALNUM
     |    lwz CARG2, 4(RA)
     |    lwz CARG4, 4(RD)
     |.endif
@@ -3616,13 +3616,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  bne >1
       |  add PC, PC, SAVE0
       |1:
-      |.if not FFI
+      |.if ! FFI
       |3:
       |.endif
     } else {
       |  beq >2
       |1:
-      |.if not FFI
+      |.if ! FFI
       |3:
       |.endif
       |  add PC, PC, SAVE0
@@ -3749,7 +3749,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lwzx TMP0, BASE, RA
     |  srwi TMP1, RD, 3
     |  ins_next1
-    |.if not PPE and not GPR64
+    |.if ! PPE && ! GPR64
     |  add. TMP0, TMP0, TMP1
     |.else
     |  neg TMP1, TMP1
@@ -3816,7 +3816,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |3:
     |  ins_next2
     |4:
-    |.if not GPR64
+    |.if ! GPR64
     |  // Potential overflow.
     |  checkov TMP1, <1			// Ignore unrelated overflow.
     |.endif
@@ -4571,7 +4571,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |5:
     |  checkstr CARG2; bne ->vmeta_tgetv
-    |.if not DUALNUM
+    |.if ! DUALNUM
     |  lwz STR:RC, 4(RC)
     |.endif
     |  b ->BC_TGETS_Z			// String key?
@@ -4763,7 +4763,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |5:
     |  checkstr CARG2; bne ->vmeta_tsetv
-    |.if not DUALNUM
+    |.if ! DUALNUM
     |  lwz STR:RC, 4(RC)
     |.endif
     |  b ->BC_TSETS_Z			// String key?
@@ -5170,7 +5170,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |     decode_RD4 TMP1, INS
     |    stw RC, -4(RA)			// Update control var.
     |     add PC, TMP1, TMP3
-    |.if not DUALNUM
+    |.if ! DUALNUM
     |   stfd f1, 0(RA)
     |.endif
     |3:

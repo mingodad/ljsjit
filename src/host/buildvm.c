@@ -320,7 +320,7 @@ static void emit_vmdef(BuildCtx *ctx)
 {
   char buf[80];
   int i;
-  fprintf(ctx->fp, "-- This is a generated file. DO NOT EDIT!\n\n");
+  fprintf(ctx->fp, "// This is a generated file. DO NOT EDIT!\n\n");
   fprintf(ctx->fp, "return {\n\n");
 
   fprintf(ctx->fp, "bcnames = \"");

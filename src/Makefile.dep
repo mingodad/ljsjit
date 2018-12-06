@@ -243,4 +243,4 @@ host/buildvm_lib.o: host/buildvm_lib.c host/buildvm.h lj_def.h lua.h luaconf.h \
  host/buildvm_libbc.h
 host/buildvm_peobj.o: host/buildvm_peobj.c host/buildvm.h lj_def.h lua.h \
  luaconf.h lj_arch.h lj_bc.h lj_def.h lj_arch.h
-host/minilua.o: host/minilua.c
+host/miniljs.o: host/miniljs.c

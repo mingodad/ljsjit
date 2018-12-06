@@ -3065,7 +3065,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |.macro ins_arithdn, intins, fpins, fpcall
     |  ins_arithpre
-    |.if "intins" ~= "vm_modi" and not FPU
+    |.if "intins" != "vm_modi" && ! FPU
     |   ins_next1
     |.endif
     |  ins_arithcheck_int >5
@@ -3083,7 +3083,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithfallback bvs
     |.endif
     |4:
-    |.if "intins" == "vm_modi" or FPU
+    |.if "intins" == "vm_modi" || FPU
     |   ins_next1
     |.endif
     |   ins_next2
@@ -3101,7 +3101,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_arithpost_fpu d6
     |.else
     |  bl fpcall
-    |.if "intins" ~= "vm_modi"
+    |.if "intins" != "vm_modi"
     |  ins_next1
     |.endif
     |  b <4
@@ -3110,7 +3110,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |.macro ins_arithfp, fpins, fpcall
     |  ins_arithpre
-    |.if "fpins" ~= "extern" or HFABI
+    |.if "fpins" != "extern" || HFABI
     |  ins_arithpre_fpu d0, d1
     |.endif
     |  ins_arithfallback ins_arithcheck_num
@@ -3123,7 +3123,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  bl fpcall
     |.endif
-    |.if ("fpins" ~= "extern" or HFABI) and FPU
+    |.if ("fpins" != "extern" || HFABI) && FPU
     |  ins_arithpost_fpu d0
     |.else
     |   ins_next1
@@ -4310,7 +4310,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next2
     |  b <3
     |
-    |.if not FPU
+    |.if ! FPU
     |8:  // Invert check for negative step.
     if (vk) {
       |  bl extern __aeabi_dadd
