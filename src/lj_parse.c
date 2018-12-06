@@ -1719,10 +1719,15 @@ static void expr_kvalue(TValue *v, ExpDesc *e)
   }
 }
 
+static int is_key_value_delimiter(int tok)
+{
+  return tok == '=' || tok == ':';
+}
 static void check_key_value_delimiter(LexState *ls)
 {
-  if(!(lex_opt(ls, '=') || lex_opt(ls, ':')))
+  if(!is_key_value_delimiter(ls->tok))
     err_syntax(ls, LJ_ERR_XKVDELIMIN);
+  lj_lex_next(ls);
 }
 
 /* Parse table constructor expression. */
@@ -1750,6 +1755,12 @@ static void expr_table_array(LexState *ls, ExpDesc *e, LexToken openTk, LexToken
       if (!expr_isk(&key)) expr_index(fs, e, &key);
       if (expr_isnumk(&key) && expr_numiszero(&key)) needarr = 1; else nhash++;
       check_key_value_delimiter(ls);
+    } else if (ls->tok == TK_string) {
+      if(!is_key_value_delimiter(lj_lex_lookahead(ls))) goto array_decl;
+      expr(ls, &key);
+      expr_toval(fs, &key);
+      check_key_value_delimiter(ls);
+      nhash++;
     } else if ((ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) &&
 	       (((tk_lookahead = lj_lex_lookahead(ls)) == '=') || (tk_lookahead == ':'))) {
       expr_str(ls, &key);
@@ -1975,7 +1986,6 @@ static void parse_args(LexState *ls, ExpDesc *e)
 }
 
 static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost);
-
 /* Parse primary expression. */
 static void expr_primary(LexState *ls, ExpDesc *v)
 {
@@ -2270,7 +2280,7 @@ static void assign_compound (LexState *ls, LHSVarList *lh, LexToken opType) {
 
   /* ground the lhs expresion */
   expr_tonextreg(fs, &lh->v);
-  
+
   /* parse right-hand expression */
   nexps = expr_list(ls, &rh);
   checkcond(ls, nexps == 1, LJ_ERR_XRIGHTCOMPOUND);
@@ -2822,7 +2832,6 @@ static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost) {
   bcemit_store(fs, v, &e1);
   if(v != &lv) expr_tonextreg(fs, v);
 }
-
 /* -- Parse statements ---------------------------------------------------- */
 
 /* Parse a statement. Returns 1 if it must be the last one in a chunk. */
