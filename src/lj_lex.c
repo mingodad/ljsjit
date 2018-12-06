@@ -330,6 +330,7 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
         else if (ls->c == '*') {
           /* Long comment */
           lex_next(ls);
+          int nested = 1;
           for (;;) {
             switch (ls->c) {
               case LEX_EOF:
@@ -339,9 +340,13 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
                 lex_next(ls);
                 if (ls->c == '/') {
                   lex_next(ls);
-                  goto end_long_comment;
+                  if(--nested == 0) goto end_long_comment;
                 }
                 break;
+              case '/':
+                lex_next(ls);
+                if(ls->c == '*') ++nested;
+                continue;
               case '\n':
               case '\r': {
                 lex_newline(ls);
