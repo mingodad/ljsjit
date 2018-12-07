@@ -52,6 +52,9 @@ typedef enum {
   VVOID
 } ExpKind;
 
+#define vkisvar(k)	(VLOCAL <= (k) && (k) <= VINDEXED)
+#define vkisinreg(k)	((k) == VNONRELOC || (k) == VLOCAL)
+
 /* Expression descriptor. */
 typedef struct ExpDesc {
   union {
@@ -2263,7 +2266,7 @@ static void assign_compound (LexState *ls, LHSVarList *lh, LexToken opType) {
   /*store expression before grounding */
   lhv = lh->v;
 
-  checkcond(ls, VLOCAL <= lh->v.k && lh->v.k <= VINDEXED, LJ_ERR_XLEFTCOMPOUND);
+  checkcond(ls, vkisvar(lh->v.k), LJ_ERR_XLEFTCOMPOUND);
 
   /* parse Compound operation. */
   switch (opType) {
@@ -2344,7 +2347,7 @@ static void assign_adjust(LexState *ls, BCReg nvars, BCReg nexps, ExpDesc *e)
 static void parse_assignment(LexState *ls, LHSVarList *lh, BCReg nvars)
 {
   ExpDesc e;
-  checkcond(ls, VLOCAL <= lh->v.k && lh->v.k <= VINDEXED, LJ_ERR_XSYNTAX);
+  checkcond(ls, vkisvar(lh->v.k), LJ_ERR_XSYNTAX);
   if (lex_opt(ls, ',')) {  /* Collect LHS list and recurse upwards. */
     LHSVarList vl;
     vl.prev = lh;
@@ -2814,6 +2817,7 @@ static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost) {
   expr_init(&e2, VKNUM, 0);
   setintV(&e2.u.nval, 1);
   if(isPost) {
+    checkcond(ls, vkisvar(v->k), LJ_ERR_XNOTASSIGNABLE);
     lv = e1 = *v;
     if (v->k == VINDEXED)
       bcreg_reserve(fs, 1);
@@ -2825,6 +2829,7 @@ static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost) {
     return;
   }
   expr_primary(ls, v);
+  checkcond(ls, vkisvar(v->k), LJ_ERR_XNOTASSIGNABLE);
   e1 = *v;
   if (v->k == VINDEXED)
     bcreg_reserve(fs, fs->freereg - indices);

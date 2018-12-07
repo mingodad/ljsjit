@@ -150,6 +150,7 @@ ERRDEF(XLEFTCOMPOUND,	"syntax error in left hand expression in compound assignme
 ERRDEF(XRIGHTCOMPOUND,	"syntax error in right hand expression in compound assignment")
 ERRDEF(XKVDELIMIN,	"expect '=' or ':' as key value delimiter")
 ERRDEF(XNAMEDUP,	"duplicate name " LUA_QS)
+ERRDEF(XNOTASSIGNABLE,	"syntax error expression not assignable")
 
 /* Bytecode reader errors. */
 ERRDEF(BCFMT,	"cannot load incompatible bytecode")
