@@ -956,6 +956,7 @@ static const lu_byte luaP_opmodes[(cast(int,OP_VARARG)+1)];
 #define getBMode(m)(cast(enum OpArgMask,(luaP_opmodes[m]>>4)&3))
 #define getCMode(m)(cast(enum OpArgMask,(luaP_opmodes[m]>>2)&3))
 #define testTMode(m)(luaP_opmodes[m]&(1<<7))
+#define vkisvar(k)(VLOCAL<=(k)&&(k)<=VINDEXED)
 typedef struct expdesc{
 expkind k;
 union{
@@ -2905,6 +2906,8 @@ next(ls);
 break;
 //long comment
 }else if(ls->current=='*'){
+next(ls);
+int nested=1;
 for(;;){
 switch(ls->current){
 case(-1):
@@ -2914,9 +2917,13 @@ case'*':
 next(ls);
 if(ls->current=='/'){
 next(ls);
-goto end_long_comment;
+if(--nested==0)goto end_long_comment;
 }
 break;
+case'/':
+next(ls);
+if(ls->current=='*')++nested;
+continue;
 case'\n':
 case'\r':{
 inclinenumber(ls);
@@ -4053,6 +4060,10 @@ expr(ls,v);
 luaK_exp2val(ls->fs,v);
 checknext(ls,']');
 }
+static void sindex(LexState*ls,expdesc*v){
+expr(ls,v);
+luaK_exp2val(ls->fs,v);
+}
 struct ConsControl{
 expdesc v;
 expdesc*t;
@@ -4068,6 +4079,9 @@ int rkkey;
 if(ls->t.token==TK_NAME){
 luaY_checklimit(fs,cc->nh,(INT_MAX-2),"items in a constructor");
 checkname(ls,&key);
+}
+else if(ls->t.token==TK_STRING){
+sindex(ls,&key);
 }
 else
 yindex(ls,&key);
@@ -4109,6 +4123,7 @@ cc->tostore++;
 }
 static void table_field(LexState*ls,struct ConsControl*cc){
 switch(ls->t.token){
+case TK_STRING:
 case TK_NAME:{
 luaX_lookahead(ls);
 if(!((ls->lookahead.token=='=')||(ls->lookahead.token==':')))
@@ -4543,8 +4558,7 @@ luaK_reserveregs(fs,1);
 }
 static void assignment(LexState*ls,struct LHS_assign*lh,int nvars){
 expdesc e;
-check_condition(ls,VLOCAL<=lh->v.k&&lh->v.k<=VINDEXED,
-"syntax error");
+check_condition(ls,vkisvar(lh->v.k),"syntax error");
 if(testnext(ls,',')){
 struct LHS_assign nv;
 nv.prev=lh;
@@ -4579,7 +4593,7 @@ expdesc lhv,infix,rh;
 int nexps;
 BinOpr op;
 lhv=lh->v;
-check_condition(ls,VLOCAL<=lh->v.k&&lh->v.k<=VINDEXED,
+check_condition(ls,vkisvar(lh->v.k),
 "syntax error in left hand expression in compound assignment");
 switch(opType){
 case TK_CADD:op=OPR_ADD;break;
@@ -4852,7 +4866,7 @@ case';':
 break;
 default:
 luaX_syntaxerror(ls,lua_pushfstring(ls->L,
-"'+=', '-=', '*=', '/=', '%%=', '..=' or '=' expected"));
+"'++', '--', +=', '-=', '*=', '/=', '%%=', '..=' or '=' expected"));
 break;
 }
 }
@@ -4885,62 +4899,6 @@ first=fs->nactvar;
 }
 luaK_ret(fs,first,nret);
 }
-static void codecompcase(FuncState*fs,int base,int nargs,expdesc*e){
-//luaK_codeABC(fs,OP_CMD,base,nargs,CMD_CASE);
-e->u.s.info=luaK_jump(fs);
-e->k=VJMP;
-}
-static void casestat(LexState*ls,expdesc*v){
-FuncState*fs=ls->fs;
-expdesc v2;
-int nargs,base;
-checknext(ls,TK_CASE);
-base=fs->freereg;
-luaK_exp2nextreg(fs,v);
-nargs=explist1(ls,&v2);
-if(!(v2.k==VK||v2.k==VKNUM))luaX_syntaxerror(ls,"case expressions must be constants");
-luaK_exp2nextreg(fs,&v2);
-codecompcase(fs,base,nargs+1,v);
-fs->freereg-=nargs+1;
-if(v->k==VNIL)v->k=VFALSE;
-luaK_goiftrue(fs,v);
-luaK_patchtohere(fs,v->t);
-checknext(ls,':');
-block(ls);
-}
-static void switchstat(LexState*ls,int line){
-FuncState*fs=ls->fs;
-BlockCnt bl;
-int escapelist=(-1);
-expdesc v;
-luaX_next(ls);
-checknext(ls,'(');
-enterblock(fs,&bl,0);
-expr(ls,&v);
-checknext(ls,')');
-checknext(ls,'{');
-int isFirst=1;
-while(ls->t.token==TK_CASE){
-if(!isFirst){
-luaK_concat(fs,&escapelist,luaK_jump(fs));
-luaK_patchtohere(fs,v.f);
-}
-casestat(ls,&v);
-isFirst=0;
-}
-if(ls->t.token==TK_DEFAULT){
-luaK_concat(fs,&escapelist,luaK_jump(fs));
-luaK_patchtohere(fs,v.f);
-luaX_next(ls);
-checknext(ls,':');
-block(ls);
-}else{
-luaK_concat(fs,&escapelist,v.f);
-}
-luaK_patchtohere(fs,escapelist);
-check_match(ls,'}',TK_SWITCH,line);
-leaveblock(fs);
-}
 static void inc_dec_op(LexState*ls,OpCode op,expdesc*v,int isPost){
 FuncState*fs=ls->fs;
 expdesc lv,e1,e2;
@@ -4950,6 +4908,8 @@ indices=fs->freereg;
 init_exp(&e2,VKNUM,0);
 e2.u.nval=(lua_Integer)1;
 if(isPost){
+check_condition(ls,vkisvar(v->k),
+"syntax error expression not assignable");
 lv=e1=*v;
 if(v->k==VINDEXED)
 luaK_reserveregs(fs,1);
@@ -4961,6 +4921,8 @@ luaK_storevar(fs,&lv,&e1);
 return;
 }
 primaryexp(ls,v);
+check_condition(ls,vkisvar(v->k),
+"syntax error expression not assignable");
 e1=*v;
 if(v->k==VINDEXED)
 luaK_reserveregs(fs,fs->freereg-indices);
@@ -5016,10 +4978,6 @@ case TK_CONTINUE:{
 luaX_next(ls);
 continuestat(ls);
 return 1;
-}
-case TK_SWITCH:{
-switchstat(ls,line);
-return 0;
 }
 case TK_PLUSPLUS:{
 luaX_next(ls);
