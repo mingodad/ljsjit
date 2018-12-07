@@ -12,6 +12,10 @@
 #include <limits.h>
 #include <stddef.h>
 
+#if !defined(LUAJIT_LJS) && !defined(NOLUAJIT_LJS)
+#define LUAJIT_LJS
+#endif
+
 #ifdef LUAJIT_LJS
   #define LUA_SCRIPT_EXT ".ljs"
 #else
