@@ -87,20 +87,19 @@ BUILDMODE= mixed
 ##############################################################################
 # Enable/disable these features as needed, but make sure you force a full
 # recompile with "make clean", followed by "make".
-XCFLAGS=
+XCFLAGS=-DLUAJIT_LJS
 #
 # Permanently disable the FFI extension to reduce the size of the LuaJIT
 # executable. But please consider that the FFI library is compiled-in,
 # but NOT loaded by default. It only allocates any memory, if you actually
 # make use of it.
 #XCFLAGS+= -DLUAJIT_DISABLE_FFI
-XCFLAGS+= -DLUAJIT_LJS -DLUAJIT_ENABLE_LUA52COMPAT
 #
 # Features from Lua 5.2 that are unlikely to break existing code are
 # enabled by default. Some other features that *might* break some existing
 # code (e.g. __pairs or os.execute() return values) can be enabled here.
 # Note: this does not provide full compatibility with Lua 5.2 at this time.
-#XCFLAGS+= -DLUAJIT_ENABLE_LUA52COMPAT
+XCFLAGS+= -DLUAJIT_ENABLE_LUA52COMPAT
 #
 # Disable the JIT compiler, i.e. turn LuaJIT into a pure interpreter.
 #XCFLAGS+= -DLUAJIT_DISABLE_JIT
