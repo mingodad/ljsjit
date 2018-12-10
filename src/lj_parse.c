@@ -111,6 +111,8 @@ typedef struct FuncScope {
 #define FSCOPE_UPVAL		0x08	/* Upvalue in scope. */
 #define FSCOPE_NOCLOSE		0x10	/* Do not close upvalues. */
 #define FSCOPE_CONTINUE		0x20	/* Continue used in scope. */
+#define FSCOPE_FORINLOOP		0x40	/* Scope is a (breakable) for in loop. */
+#define FSCOPE_DOWHILELOOP	0x80	/* Scope is a (breakable) do while in loop. */
 
 #define NAME_BREAK		((GCstr *)(uintptr_t)1)
 #define NAME_CONTINUE		((GCstr *)(uintptr_t)2)
@@ -1041,8 +1043,11 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
   MSize vtop = ls->vtop;
   BCReg i, nactvar_n = fs->nactvar+n;
   for (i=fs->bl->nactvar; i < nactvar_n; ++i) {
-    if (name == strref(var_get(ls, fs, i).name))
+    if (name == strref(var_get(ls, fs, i).name)) {
+      /* allow '_' duplicates */
+      if(name->len == 1 && strdata(name)[0] == '_') break;
       lj_lex_error(ls, 0, LJ_ERR_XNAMEDUP, strdata(name));
+    }
   }
   checklimit(fs, nactvar_n, LJ_MAX_LOCVAR, "local variables");
   if (LJ_UNLIKELY(vtop >= ls->sizevstack)) {
@@ -1304,7 +1309,10 @@ static void fscope_end(FuncState *fs)
   if ((bl->flags & FSCOPE_CONTINUE)) {
     if ((bl->flags & FSCOPE_LOOP)) {
       /* fs->pc-1 to jump justo to the loop botton */
-      MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, fs->pc-1);
+      BCPos target = fs->pc - 1;
+      if(bl->flags & FSCOPE_FORINLOOP) --target;
+      else if(bl->flags & FSCOPE_DOWHILELOOP) target -= 2;
+      MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, target);
       ls->vtop = idx;  /* Drop continue label immediately. */
       gola_resolve(ls, bl, idx);
     } else {  /* Need the fixup step to propagate the continues. */
@@ -1999,24 +2007,6 @@ static void expr_primary(LexState *ls, ExpDesc *v)
     lj_lex_next(ls);
     expr(ls, v);
     lex_match(ls, ')', '(', line);
-    if (lex_opt(ls, '?')) {
-      BCPos condexit;
-      BCPos escapelist = NO_JMP;
-      BCReg reg;
-      FuncState *fs = ls->fs;
-      if (v->k == VKNIL) v->k = VKFALSE;  /* 'falses' are all equal here */
-      bcemit_branch_t(ls->fs, v);  /* skip over block if condition is false */
-      condexit = v->f;
-      expr(ls, v);  /* eval part for true conditional */
-      reg = expr_toanyreg(fs, v);  /* set result to reg. */
-      jmp_append(fs, &escapelist, bcemit_jmp(fs));  /* must jump over it */
-      jmp_tohere(fs, condexit);
-      lex_check(ls, ':');
-      expr(ls, v);  /* eval part for false conditional */
-      expr_toreg(fs, v, reg);  /* set result to reg. */
-      jmp_tohere(fs, escapelist);  /* patch escape list to conditional end */
-      return;
-    }
     expr_discharge(ls->fs, v);
   } else if (ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) {
     var_lookup(ls, v);
@@ -2220,6 +2210,23 @@ static BinOpr expr_binop(LexState *ls, ExpDesc *v, uint32_t limit)
 static void expr(LexState *ls, ExpDesc *v)
 {
   expr_binop(ls, v, 0);  /* Priority 0: parse whole expression. */
+  if (lex_opt(ls, '?')) {
+    BCPos condexit;
+    BCPos escapelist = NO_JMP;
+    BCReg reg;
+    FuncState *fs = ls->fs;
+    if (v->k == VKNIL) v->k = VKFALSE;  /* 'falses' are all equal here */
+    bcemit_branch_t(ls->fs, v);  /* skip over block if condition is false */
+    condexit = v->f;
+    expr(ls, v);  /* eval part for true conditional */
+    reg = expr_toanyreg(fs, v);  /* set result to reg. */
+    jmp_append(fs, &escapelist, bcemit_jmp(fs));  /* must jump over it */
+    jmp_tohere(fs, condexit);
+    lex_check(ls, ':');
+    expr(ls, v);  /* eval part for false conditional */
+    expr_toreg(fs, v, reg);  /* set result to reg. */
+    jmp_tohere(fs, escapelist);  /* patch escape list to conditional end */
+  }
 }
 
 /* Assign expression to the next register. */
@@ -2618,7 +2625,7 @@ static void parse_do_while(LexState *ls, BCLine line)
   BCPos loop = fs->lasttarget = fs->pc;
   BCPos condexit;
   FuncScope bl1, bl2;
-  fscope_begin(fs, &bl1, FSCOPE_LOOP);  /* Breakable loop scope. */
+  fscope_begin(fs, &bl1, FSCOPE_LOOP | FSCOPE_DOWHILELOOP);  /* Breakable loop scope. */
   fscope_begin(fs, &bl2, 0);  /* Inner scope. */
   lj_lex_next(ls);  /* Skip 'do'. */
   lex_check(ls, '{');
@@ -2767,8 +2774,10 @@ static void parse_for(LexState *ls, BCLine line)
   varname = lex_str(ls);  /* Get first variable name. */
   if (ls->tok == '=')
     parse_for_num(ls, varname, line);
-  else if (ls->tok == ',' || ls->tok == TK_in)
+  else if (ls->tok == ',' || ls->tok == TK_in) {
     parse_for_iter(ls, varname);
+    bl.flags |= FSCOPE_FORINLOOP;
+  }
   else
     err_syntax(ls, LJ_ERR_XFOR);
   fscope_end(fs);  /* Resolve break list. */
