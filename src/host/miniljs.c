@@ -124,10 +124,10 @@ VCALL,
 VVARARG
 }expkind;
 enum RESERVED{
-TK_BREAK=257,TK_CASE,TK_CONTINUE,
-TK_DEFAULT,TK_DO,TK_ELSE,TK_FALSE,TK___FILE__,TK_FOR,TK_FUNCTION,
+TK_BREAK=257,TK_CONTINUE,
+TK_DO,TK_ELSE,TK_FALSE,TK___FILE__,TK_FOR,TK_FUNCTION,
 TK_GOTO,TK_IF,TK_IN,TK___LINE__,TK_LOCAL,TK_NIL,
-TK_RETURN,TK_SWITCH,TK_TRUE,TK_WHILE,
+TK_RETURN,TK_TRUE,TK_WHILE,
 TK_AND,TK_NOT,TK_OR,TK_POW,
 TK_CONCAT,TK_DOTS,TK_EQ,TK_GE,TK_LE,TK_NE,
 TK_CADD,TK_CSUB,TK_CMUL,TK_CDIV,TK_CMOD,TK_CCONCAT,
@@ -2670,10 +2670,10 @@ opmode(0,1,OpArgR,OpArgN,iABC)
 #define next(ls)(ls->current=zgetc(ls->z))
 #define currIsNewline(ls)(ls->current=='\n'||ls->current=='\r')
 static const char*const luaX_tokens[]={
-"break","case","continue","default","do","else",
+"break","continue","do","else",
 "false","__FILE__","for","function","goto","if",
 "in","__LINE__","var","null",
-"return","switch","true","while",
+"return","true","while",
 "&&","||","!","**",
 "..","...","==",">=","<=","!=",
 "+=","-=","*=","/=","%=","..=",
@@ -2908,13 +2908,26 @@ break;
 }else if(ls->current=='*'){
 next(ls);
 int nested=1;
+int eq_follow=ls->current=='=';
 for(;;){
 switch(ls->current){
 case(-1):
 luaX_lexerror(ls,"unfinished long comment",TK_EOS);
 break;
+case'=':
+next(ls);
+if(!eq_follow)break;
+if(ls->current=='*'){
+next(ls);
+if(ls->current=='/'){
+next(ls);
+goto end_long_comment;
+}
+}
+break;
 case'*':
 next(ls);
+if(eq_follow)break;
 if(ls->current=='/'){
 next(ls);
 if(--nested==0)goto end_long_comment;
@@ -2922,7 +2935,7 @@ if(--nested==0)goto end_long_comment;
 break;
 case'/':
 next(ls);
-if(ls->current=='*')++nested;
+if(!eq_follow&&ls->current=='*')++nested;
 continue;
 case'\n':
 case'\r':{
@@ -3836,9 +3849,11 @@ int vidx,nactvar_n;
 vidx=fs->bl?fs->bl->nactvar:0;
 nactvar_n=fs->nactvar+n;
 for(;vidx<nactvar_n;++vidx){
-if(name==getlocvar(fs,vidx).varname)
+if(name==getlocvar(fs,vidx).varname){
+if(name->tsv.len==1&&getstr(name)[0]=='_')break;
 luaX_syntaxerror(ls,luaO_pushfstring(ls->L,
 "Name [%s] already declared",getstr(name)));
+}
 }
 luaY_checklimit(fs,nactvar_n+1,200,"local variables");
 fs->actvar[nactvar_n]=cast(unsigned short,registerlocalvar(ls,name));
@@ -4273,24 +4288,6 @@ int line=ls->linenumber;
 luaX_next(ls);
 expr(ls,v);
 check_match(ls,')','(',line);
-if(testnext(ls,'?')){
-int condexit;
-int escapelist=(-1);
-int reg;
-FuncState*fs=ls->fs;
-if(v->k==VNIL)v->k=VFALSE;
-luaK_goiftrue(ls->fs,v);
-condexit=v->f;
-expr(ls,v);
-reg=luaK_exp2anyreg(fs,v);
-luaK_concat(fs,&escapelist,luaK_jump(fs));
-luaK_patchtohere(fs,condexit);
-checknext(ls,':');
-expr(ls,v);
-luaK_exp2reg(fs,v,reg);
-luaK_patchtohere(fs,escapelist);
-return;
-}
 luaK_dischargevars(ls->fs,v);
 return;
 }
@@ -4504,6 +4501,23 @@ return op;
 }
 static void expr(LexState*ls,expdesc*v){
 subexpr(ls,v,0);
+if(testnext(ls,'?')){
+int condexit;
+int escapelist=(-1);
+int reg;
+FuncState*fs=ls->fs;
+if(v->k==VNIL)v->k=VFALSE;
+luaK_goiftrue(ls->fs,v);
+condexit=v->f;
+expr(ls,v);
+reg=luaK_exp2anyreg(fs,v);
+luaK_concat(fs,&escapelist,luaK_jump(fs));
+luaK_patchtohere(fs,condexit);
+checknext(ls,':');
+expr(ls,v);
+luaK_exp2reg(fs,v,reg);
+luaK_patchtohere(fs,escapelist);
+}
 }
 static int block_follow(int token){
 switch(token){
