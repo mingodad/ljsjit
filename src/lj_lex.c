@@ -331,13 +331,26 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
           /* Long comment */
           lex_next(ls);
           int nested = 1;
+          int eq_follow = ls->c == '=';
           for (;;) {
             switch (ls->c) {
               case LEX_EOF:
                 lj_lex_error(ls, TK_string, LJ_ERR_XLDELIM);
                 break;  /* to avoid warnings */
+              case '=':
+                lex_next(ls);
+                if(!eq_follow) break;
+                if(ls->c == '*') {
+                  lex_next(ls);
+                  if(ls->c == '/') {
+                    lex_next(ls);
+                    goto end_long_comment;
+                  }
+                }
+                break;
               case '*':
                 lex_next(ls);
+                if(eq_follow) break;
                 if (ls->c == '/') {
                   lex_next(ls);
                   if(--nested == 0) goto end_long_comment;
@@ -345,7 +358,7 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
                 break;
               case '/':
                 lex_next(ls);
-                if(ls->c == '*') ++nested;
+                if(!eq_follow && ls->c == '*') ++nested;
                 continue;
               case '\n':
               case '\r': {
