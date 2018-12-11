@@ -170,7 +170,7 @@ var function writeglobals(out, prefix) {
 // Write global label names.
 var function writeglobalnames(out, name) {
   var t = {};
-  for( name, n in pairs(map_global) ) { t[n] = name; }
+  for( xname, n in pairs(map_global) ) { t[n] = xname; }
   out->write("static const char *const ", name, "[] = {\n");
   for( i=20,next_global-1 ) {
     out->write("  \"", t[i], "\",\n");
@@ -729,17 +729,17 @@ var function parse_load(params, nparams, n, op) {
   if( ! p1 ) {
     if( ! p2 ) {
       if( match(pn, "^[<>=%-]") || match(pn, "^extern%s+") ) {
-	var mode, n, s = parse_label(pn, false);
-	waction("REL_"..mode, n + (ext && 0x1800 || 0x0800), s, 1);
+	var mode, mn, s = parse_label(pn, false);
+	waction("REL_"..mode, mn + (ext && 0x1800 || 0x0800), s, 1);
 	return op + 15 * 65536 + 0x01000000 + (ext && 0x00400000 || 0);
       }
       var reg, tailr = match(pn, "^([%w_:]+)%s*(.*)$");
       if( reg && tailr != "" ) {
-	var d, tp = parse_gpr(reg);
+	var dp, tp = parse_gpr(reg);
 	if( tp ) {
 	  waction(ext && "IMML8" || "IMML12", 32768 + 32*(ext && 8 || 12),
 		  format(tp.ctypefmt, tailr));
-	  return op + shl(d, 16) + 0x01000000 + (ext && 0x00400000 || 0);
+	  return op + shl(dp, 16) + 0x01000000 + (ext && 0x00400000 || 0);
 	}
       }
     }
@@ -762,7 +762,8 @@ var function parse_load(params, nparams, n, op) {
       if( p3 ) { op +=   parse_shift(p3); }
     }
   } else {
-    var p1a, p2 = match(p1, "^([^,%s]*)%s*(.*)$");
+    var p1a;
+    p1a, p2 = match(p1, "^([^,%s]*)%s*(.*)$");
     op +=   shl(parse_gpr(p1a), 16) + 0x01000000;
     if( p2 != "" ) {
       var imm = match(p2, "^,%s*#(.*)$");
@@ -811,7 +812,8 @@ var function parse_vload(q) {
       waction("REL_"..mode, n + 0x2800, s, 1);
       return 15 * 65536;
     }
-    var reg, tailr = match(q, "^([%w_:]+)%s*(.*)$");
+    var tailr;
+    reg, tailr = match(q, "^([%w_:]+)%s*(.*)$");
     if( reg && tailr != "" ) {
       var d, tp = parse_gpr(reg);
       if( tp ) {
@@ -863,15 +865,15 @@ var function parse_template(params, template, nparams, pos) {
     } else if( p == "l" ) {
       op +=   parse_vload(q);
     } else if( p == "B" ) {
-      var mode, n, s = parse_label(q, false);
-      waction("REL_"..mode, n, s, 1);
+      var mode, mn, s = parse_label(q, false);
+      waction("REL_"..mode, mn, s, 1);
     } else if( p == "C" ) { // blx gpr vs. blx label.
       if( match(q, "^([%w_]+):(r1?[0-9])$") || match(q, "^r(1?[0-9])$") ) {
 	op +=   parse_gpr(q);
       } else {
 	if( op < 0xe0000000 ) { werror("unconditional instruction"); }
-	var mode, n, s = parse_label(q, false);
-	waction("REL_"..mode, n, s, 1);
+	var mode, mn, s = parse_label(q, false);
+	waction("REL_"..mode, mn, s, 1);
 	op = 0xfa000000;
       }
     } else if( p == "F" ) {
@@ -1108,7 +1110,7 @@ function _M.mergemaps(map_coreop, map_def) {
     var k1, cc, k2 = match(k, "^(.-)(..)([._].*)$");
     var cv = map_cond[cc];
     if( cv ) {
-      var v = rawget(t, k1..k2);
+      v = rawget(t, k1..k2);
       if( type(v) == "string" ) {
 	var scv = format("%x", cv);
 	return gsub(scv..sub(v, 2), "|e", "|"..scv);

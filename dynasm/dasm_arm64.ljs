@@ -170,7 +170,7 @@ var function writeglobals(out, prefix) {
 // Write global label names.
 var function writeglobalnames(out, name) {
   var t = {};
-  for( name, n in pairs(map_global) ) { t[n] = name; }
+  for( xname, n in pairs(map_global) ) { t[n] = xname; }
   out->write("static const char *const ", name, "[] = {\n");
   for( i=20,next_global-1 ) {
     out->write("  \"", t[i], "\",\n");

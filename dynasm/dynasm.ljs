@@ -647,8 +647,8 @@ function opt_map.dumparch(args) {
   }
 
   var t = {};
-  for( name in pairs(map_coreop) ) { t[#t+1] = name; }
-  for( name in pairs(map_op) ) { t[#t+1] = name; }
+  for( xname in pairs(map_coreop) ) { t[#t+1] = xname; }
+  for( xname in pairs(map_op) ) { t[#t+1] = xname; }
   sort(t);
 
   var out = stdout;
@@ -660,9 +660,9 @@ function opt_map.dumparch(args) {
   var pseudo = true;
   out->write("Pseudo-Opcodes:\n");
   for( _,sname in ipairs(t) ) {
-    var name, nparam = match(sname, "^(.+)_([0-9%*])$");
-    if( name ) {
-      if( pseudo && sub(name, 1, 1) != "." ) {
+    var xname, nparam = match(sname, "^(.+)_([0-9%*])$");
+    if( xname ) {
+      if( pseudo && sub(xname, 1, 1) != "." ) {
 	out->write("\nOpcodes:\n");
 	pseudo = false;
       }
@@ -678,10 +678,10 @@ function opt_map.dumparch(args) {
       }
       if( type(s) == "table" ) {
 	for( _,s2 in ipairs(s) ) {
-	  out->write(format("  %-12s %s\n", name, s2));
+	  out->write(format("  %-12s %s\n", xname, s2));
 	}
       } else {
-	out->write(format("  %-12s %s\n", name, s));
+	out->write(format("  %-12s %s\n", xname, s));
       }
     }
   }

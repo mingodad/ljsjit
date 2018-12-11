@@ -168,7 +168,7 @@ var function writeglobals(out, prefix) {
 // Write global label names.
 var function writeglobalnames(out, name) {
   var t = {};
-  for( name, n in pairs(map_global) ) { t[n] = name; }
+  for( xname, n in pairs(map_global) ) { t[n] = xname; }
   out->write("static const char *const ", name, "[] = {\n");
   for( i=20,next_global-1 ) {
     out->write("  \"", t[i], "\",\n");
@@ -810,7 +810,8 @@ map_op[".template__"] = function(params, template, nparams) {
     } else if( p == "X" ) {
       op +=   parse_index(params[n]); n +=   1;
     } else if( p == "B" || p == "J" ) {
-      var mode, n, s = parse_label(params[n], false);
+      var mode, s;
+      mode, n, s = parse_label(params[n], false); //DADBUG
       if( p == "B" ) { n +=   2048; }
       waction("REL_"..mode, n, s, 1);
       n +=   1;
