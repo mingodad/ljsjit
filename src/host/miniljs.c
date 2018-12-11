@@ -124,10 +124,10 @@ VCALL,
 VVARARG
 }expkind;
 enum RESERVED{
-TK_BREAK=257,TK_CONTINUE,
+TK_AUTO=257,TK_BREAK,TK_CONTINUE,
 TK_DO,TK_ELSE,TK_FALSE,TK___FILE__,TK_FOR,TK_FUNCTION,
-TK_GOTO,TK_IF,TK_IN,TK___LINE__,TK_LOCAL,TK_NIL,
-TK_RETURN,TK_TRUE,TK_WHILE,
+TK_GOTO,TK_IF,TK_IN,TK_LET,TK___LINE__,TK_LOCAL,TK_NIL,
+TK_RETURN,TK_TRUE,TK_VAR,TK_WHILE,
 TK_AND,TK_NOT,TK_OR,TK_POW,
 TK_CONCAT,TK_DOTS,TK_EQ,TK_GE,TK_LE,TK_NE,
 TK_CADD,TK_CSUB,TK_CMUL,TK_CDIV,TK_CMOD,TK_CCONCAT,
@@ -175,6 +175,7 @@ typedef const char*(*lua_Reader)(lua_State*L,void*ud,size_t*sz);
 typedef void*(*lua_Alloc)(void*ud,void*ptr,size_t osize,size_t nsize);
 typedef double lua_Number;
 typedef ptrdiff_t lua_Integer;
+static int lua_gettop(lua_State*L);
 static void lua_settop(lua_State*L,int idx);
 static int lua_type(lua_State*L,int idx);
 static const char* lua_tolstring(lua_State*L,int idx,size_t*len);
@@ -2670,10 +2671,10 @@ opmode(0,1,OpArgR,OpArgN,iABC)
 #define next(ls)(ls->current=zgetc(ls->z))
 #define currIsNewline(ls)(ls->current=='\n'||ls->current=='\r')
 static const char*const luaX_tokens[]={
-"break","continue","do","else",
+"auto","break","continue","do","else",
 "false","__FILE__","for","function","goto","if",
-"in","__LINE__","var","null",
-"return","true","while",
+"in","let","__LINE__","local","null",
+"return","true","var","while",
 "&&","||","!","**",
 "..","...","==",">=","<=","!=",
 "+=","-=","*=","/=","%=","..=",
@@ -3775,6 +3776,13 @@ TString*ts=ls->t.seminfo.ts;
 luaX_newstring(ls,getstr(ts),ts->tsv.len);
 }
 }
+static void parser_warning(LexState*ls,const char*msg){
+char buff[80];
+luaO_chunkid(buff,getstr(ls->source),80);
+msg=luaO_pushfstring(ls->L,"%s:%d: %s",buff,ls->linenumber,msg);
+fprintf(stderr,"warning %s\n",msg);
+fflush(stderr);
+}
 static void error_expected(LexState*ls,int token){
 luaX_syntaxerror(ls,
 luaO_pushfstring(ls->L,LUA_QL("%s")" expected",luaX_token2str(ls,token)));
@@ -3845,14 +3853,23 @@ return fs->nlocvars++;
 #define new_localvarliteral(ls,v,n)new_localvar(ls,luaX_newstring(ls,""v,(sizeof(v)/sizeof(char))-1),n)
 static void new_localvar(LexState*ls,TString*name,int n){
 FuncState*fs=ls->fs;
-int vidx,nactvar_n;
-vidx=fs->bl?fs->bl->nactvar:0;
-nactvar_n=fs->nactvar+n;
+int nactvar_n=fs->nactvar+n;
+const char*str_name=getstr(name);
+if(!(str_name[0]=='('||(name->tsv.len==1&&str_name[0]=='_'))){
+int vidx=0;
 for(;vidx<nactvar_n;++vidx){
 if(name==getlocvar(fs,vidx).varname){
-if(name->tsv.len==1&&getstr(name)[0]=='_')break;
+if(fs->bl&&vidx<fs->bl->nactvar){
+int saved_top=lua_gettop(ls->L);
+parser_warning(ls,luaO_pushfstring(ls->L,
+"Name [%s] already declared will be shadowed",str_name));
+lua_settop(ls->L,saved_top);
+}
+else{
 luaX_syntaxerror(ls,luaO_pushfstring(ls->L,
-"Name [%s] already declared",getstr(name)));
+"Name [%s] already declared",str_name));
+}
+}
 }
 }
 luaY_checklimit(fs,nactvar_n+1,200,"local variables");
@@ -4971,6 +4988,9 @@ case TK_FUNCTION:{
 funcstat(ls,line);
 return 0;
 }
+case TK_AUTO:
+case TK_VAR:
+case TK_LET:
 case TK_LOCAL:{
 luaX_next(ls);
 if(testnext(ls,TK_FUNCTION))
