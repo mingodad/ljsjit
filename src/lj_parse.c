@@ -28,6 +28,8 @@
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
+#include <stdio.h>
+
 /* -- Parser structures and definitions ----------------------------------- */
 
 /* Expression kinds. */
@@ -171,6 +173,12 @@ LJ_STATIC_ASSERT((int)BC_DIVVV-(int)BC_ADDVV == (int)OPR_DIV-(int)OPR_ADD);
 LJ_STATIC_ASSERT((int)BC_MODVV-(int)BC_ADDVV == (int)OPR_MOD-(int)OPR_ADD);
 
 /* -- Error handling ------------------------------------------------------ */
+
+static void parser_warning (LexState *ls, const char *msg) {
+  const char *str = strdata(ls->chunkname);
+  fprintf(stderr, "%s:%d: warning %s\n", (str[0] == '@') ? str+1 : str , ls->linenumber, msg);
+  fflush(stderr);
+}
 
 LJ_NORET LJ_NOINLINE static void err_syntax(LexState *ls, ErrMsg em)
 {
@@ -1042,13 +1050,25 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
   FuncState *fs = ls->fs;
   MSize vtop = ls->vtop;
   BCReg i, nactvar_n = fs->nactvar+n;
-  for (i=fs->bl->nactvar; i < nactvar_n; ++i) {
-    if (name == strref(var_get(ls, fs, i).name)) {
-      /* allow '_' duplicates */
-      if(name->len == 1 && strdata(name)[0] == '_') break;
-      lj_lex_error(ls, 0, LJ_ERR_XNAMEDUP, strdata(name));
+
+  if(name && name > ((GCstr*)0xffff)) { /*some names are made from casting ints */
+    /* allow '_' and '(for...' duplicates */
+    const char *str_name = strdata(name);
+    if(!(str_name[0] == '(' || (name->len == 1 && str_name[0] == '_'))) {
+      for (i=0; i < nactvar_n; ++i) {
+        if (name == strref(var_get(ls, fs, i).name)) {
+          if(fs->bl && i < fs->bl->nactvar) {
+            parser_warning(ls, lj_strfmt_pushf(ls->L,
+                   "Name [%s] already declared will be shadowed", str_name));
+          }
+          else {
+            lj_lex_error(ls, 0, LJ_ERR_XNAMEDUP, str_name);
+          }
+        }
+      }
     }
   }
+
   checklimit(fs, nactvar_n, LJ_MAX_LOCVAR, "local variables");
   if (LJ_UNLIKELY(vtop >= ls->sizevstack)) {
     if (ls->sizevstack >= LJ_MAX_VSTACK)
