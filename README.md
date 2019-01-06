@@ -3,7 +3,7 @@ Luajit with C/C++/Java/Javascript syntax
 
 See https://github.com/mingodad/ljs for more details and tests.
 
-Also raptorjit-ljs at https://github.com/mingodad/raptorjit-ljs and https://github.com/mingodad/loom/tree/loom-ljs
+Also raptorjit-ljs at https://github.com/mingodad/raptorjit-ljs, https://github.com/mingodad/loom/tree/loom-ljs and https://github.com/mingodad/LPegLJ/tree/ljsjit
 
 README for LuaJIT 2.1.0-beta3
 -----------------------------
