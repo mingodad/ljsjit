@@ -1,0 +1,11 @@
+assert.ljs
+error.ljs
+getfenv.ljs +lua<5.2
+getsetmetatable.ljs
+ipairs.ljs
+next.ljs
+pairs.ljs
+pcall_jit.ljs
+select.ljs
+tonumber_tostring.ljs
+xpcall_jit.ljs +compat5.2

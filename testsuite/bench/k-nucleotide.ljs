@@ -1,0 +1,58 @@
+
+var function kfrequency(seq, freq, k, frame) {
+  var sub = string.sub;
+  var k1 = k - 1;
+  for( i=frame,#seq-k1,k ) {
+    var c = sub(seq, i, i+k1);
+    freq[c] = (freq[c] || 0) + 1;
+  }
+}
+
+var function count(seq, frag) {
+  var k = #frag;
+  var freq = {};
+  for( frame=1,k ) { kfrequency(seq, freq, k, frame); }
+  io.write(freq[frag] || 0, "\t", frag, "\n");
+}
+
+var function frequency(seq, k) {
+  var freq = {};
+  for( frame=1,k ) { kfrequency(seq, freq, k, frame); }
+  var sfreq, sn, sum = {}, 1, 0;
+  for( c,v in pairs(freq) ) { sfreq[sn] = c; ++sn    ; sum +=   v; }
+  table.sort(sfreq, function(a, b) {
+    var fa, fb = freq[a], freq[b];
+    return fa == fb && a > b || fa > fb;
+  });
+  for( _,c in ipairs(sfreq) ) {
+    io.write(string.format("%s %0.3f\n", c, (freq[c]*100)/sum));
+  }
+  io.write("\n");
+}
+
+var function readseq() {
+  var sub = string.sub;
+  for( line in io.lines() ) {
+    if( sub(line, 1, 1) == ">" && sub(line, 2, 6) == "THREE" ) { break; }
+  }
+  var lines, ln = {}, 0;
+  for( line in io.lines() ) {
+    var c = sub(line, 1, 1);
+    if( c == ">" ) {
+      break;
+    } else if( c != ";" ) {
+      ++ln    ;
+      lines[ln] = line;
+    }
+  }
+  return string.upper(table.concat(lines, "", 1, ln));
+}
+
+var seq = readseq();
+frequency(seq, 1);
+frequency(seq, 2);
+count(seq, "GGT");
+count(seq, "GGTA");
+count(seq, "GGTATT");
+count(seq, "GGTATTTTAATT");
+count(seq, "GGTATTTTAATTTATAGT");

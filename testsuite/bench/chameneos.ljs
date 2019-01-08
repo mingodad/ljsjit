@@ -1,0 +1,68 @@
+
+var co = coroutine;
+var create, resume, yield = co.create, co.resume, co.yield;
+
+var N = tonumber(arg && arg[1]) || 10;
+var first, second;
+
+// Meet another creature.
+var function meet(me) {
+  while( second ) { yield(); } // Wait until meeting place clears.
+  var other = first;
+  if( other ) { // Hey, I found a new friend!
+    first = null;
+    second = me;
+  } else { // Sniff, nobody here (yet).
+    var n = N - 1;
+    if( n < 0 ) { return; } // Uh oh, the mall is closed.
+    N = n;
+    first = me;
+    do { yield(); other = second; } while(!( other) ); // Wait for another creature.
+    second = null;
+    yield(); // Be nice and let others meet up.
+  }
+  return other;
+}
+
+// Create a very social creature.
+var function creature(color) {
+  return create(function() {
+    var me = color;
+    for( met=0,1000000000 ) {
+      var other = meet(me);
+      if( ! other ) { return met; }
+      if( me != other ) {
+        if( me == "blue" ) { me = other == "red" && "yellow" || "red";
+        } else if( me == "red" ) { me = other == "blue" && "yellow" || "blue";
+        } else { me = other == "blue" && "red" || "blue"; }
+      }
+    }
+  });
+}
+
+// Trivial round-robin scheduler.
+var function schedule(threads) {
+  var resume = resume;
+  var nthreads, meetings = #threads, 0;
+  do {
+    for( i=1,nthreads ) {
+      var thr = threads[i];
+      if( ! thr ) { return meetings; }
+      var ok, met = resume(thr);
+      if( met ) {
+        meetings +=   met;
+        threads[i] = null;
+      }
+    }
+  } while(!( false) );
+}
+
+// A bunch of colorful creatures.
+var threads = {
+  creature("blue"),
+  creature("red"),
+  creature("yellow"),
+  creature("blue"),
+};
+
+io.write(schedule(threads), "\n");

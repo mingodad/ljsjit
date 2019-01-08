@@ -1,0 +1,18 @@
+{ //- BC_KNIL
+  var function f(x, y) { }
+  for( i = 1,100 ) {
+    f(i, i);
+    f(null, null);
+  }
+}
+
+{ //- BC_VARG
+  var function f() { }
+  var function g(...) {
+    f();
+    f(...);
+  }
+  for( i = 1,100 ) {
+    g();
+  }
+}

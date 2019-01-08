@@ -1,0 +1,81 @@
+
+var function callmeta(o, a, b) {
+  return o, a, b;
+}
+
+var meta = { __call = callmeta };
+
+{ //- table
+  var t = setmetatable({}, meta);
+  var o,a,b = t();
+  assert(o == t && a == null && b == null);
+  o,a,b = t("foo");
+  assert(o == t && a == "foo" && b == null);
+  o,a,b = t("foo", "bar");
+  assert(o == t && a == "foo" && b == "bar");
+}
+
+{ //- userdata +lua<5.2
+  var u = newproxy(true);
+  getmetatable(u).__call = callmeta;
+
+  var o,a,b = u();
+  assert(o == u && a == null && b == null);
+  o,a,b = u("foo");
+  assert(o == u && a == "foo" && b == null);
+  o,a,b = u("foo", "bar");
+  assert(o == u && a == "foo" && b == "bar");
+}
+
+{ //- number
+  debug.setmetatable(0, meta);
+  var o,a,b = (42)();
+  assert(o == 42 && a == null && b == null);
+  o,a,b = (42)("foo");
+  assert(o == 42 && a == "foo" && b == null);
+  o,a,b = (42)("foo", "bar");
+  assert(o == 42 && a == "foo" && b == "bar");
+  debug.setmetatable(0, null);
+}
+
+{ //- table with changing metamethod
+  var tc = setmetatable({}, { __call = function(o,a,b) { return o; }});
+  var ta = setmetatable({}, { __add = tc});
+  var o,a = ta + ta;
+  assert(o == tc && a == null);
+
+  getmetatable(tc).__call = function(o,a,b) { return a; };
+  o,a = ta + ta;
+  assert(o == ta && a == null);
+}
+
+{ //- jit table
+  var t = setmetatable({}, { __call = function(t, a) { return 100-a; } });
+  for( i=1,100 ) { assert(t(i) == 100-i); }
+}
+
+{ //- jit table rawget as metamethod
+  var t = setmetatable({}, { __call = rawget });
+  for( i=1,100 ) { t[i] = 100-i; }
+  for( i=1,100 ) { assert(t(i) == 100-i); }
+}
+
+{ //- jit number
+  debug.setmetatable(0, { __call = function(n) { return 100-n; } });
+  for( i=1,100 ) { assert((i)() == 100-i); }
+  debug.setmetatable(0, null);
+}
+
+{ //- jit newindex pcall
+  var t = setmetatable({}, { __newindex = pcall, __call = rawset });
+  for( i=1,100 ) { t[i] = 100-i; }
+  for( i=1,100 ) { assert(t[i] == 100-i); }
+}
+
+{ //- jit index pcall
+  var t = setmetatable({}, {
+    __index = pcall, __newindex = rawset,
+    __call = function(t, i) { t[i] = 100-i; },
+  });
+  for( i=1,100 ) { assert(t[i] == true && rawget(t, i) == 100-i); }
+}

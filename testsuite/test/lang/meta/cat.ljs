@@ -1,0 +1,61 @@
+var function create(cat, v1, v2) {
+  var meta = { __concat = cat };
+  return setmetatable({v1}, meta), setmetatable({v2}, meta);
+}
+
+{ //- default
+  var a, b, c = "foo", "bar", "baz";
+  assert(a..b == "foobar");
+  assert(a..b..c == "foobarbaz");
+}
+
+{ //- lhs
+  var a, b = create(function(a, b) { return a; });
+  assert(a..b == a);
+  assert(b..a == b);
+  assert(a..b..b == a);
+  assert(a..a..b == a);
+  assert(a..b..a == a);
+  assert(a..b..b..b..b..b..b..b == a);
+}
+
+{ //- rhs
+  var a, b = create(function(a, b) { return b; });
+  assert(a..b == b);
+  assert(b..a == a);
+  assert(a..b..b == b);
+  assert(a..a..b == b);
+  assert(b..b..a == a);
+  assert(a..a..a..a..a..a..a..b == b);
+}
+
+{ //- mixed types
+  var a, b = create(function(a, b) {
+    return (type(a) == "string" && a || a[1])..
+	   (type(b) == "string" && b || b[1]);
+  }, "a", "b");
+  assert(a..b == "ab");
+  assert(a..b == "ab");
+  assert(a..b..b == "abb");
+  assert(a..b..a == "aba");
+  assert(a..a..a..a..a..a..a..b == "aaaaaaab");
+  assert(a..a..a.."x".."x"..a..a..b == "aaaxxaab");
+  assert("x"..a..a..a..a..a..a..b == "xaaaaaab");
+  assert(a..b..a..b..a.."x".."x".."x" == "ababaxxx");
+}
+
+{ //- jit mixed types
+  var a, b = create(function(a, b) {
+    if( a != b ) { var x = gg; }
+    return (type(a) == "string" && a || a[1])..
+	   (type(b) == "string" && b || b[1]);
+  }, "a", "b");
+  var y;
+  for( i=1,100 ) { y = a..b; }
+  assert(y == "ab");
+  for( i=1,100 ) { y = a..b.."x"; }
+  assert(y == "abx");
+  for( i=1,100 ) { y = a..b.. 1 .. "z"; }
+  assert(y == "ab1z");
+}
+

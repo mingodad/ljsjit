@@ -1,0 +1,30 @@
+var function create(equal, v1, v2) {
+  var meta = { __eq = equal };
+  return setmetatable({v1}, meta), setmetatable({v2}, meta);
+}
+
+{ //- __eq xop
+  var xop;
+  var a, b = create(function(a,b) { xop = "eq"; return ""; });
+  assert(a==b == true && xop == "eq"); xop = null;
+  assert(a!=b == false && xop == "eq"); xop = null;
+
+  // Different metatable, but same metamethod works, too.
+  setmetatable(b, { __eq = getmetatable(b).__eq });
+  assert(a==b == true && xop == "eq"); xop = null;
+  assert(a!=b == false && xop == "eq"); xop = null;
+}
+
+{ //- __eq values
+  var a, b = create(function(a,b) { return a[1] == b[1]; }, 1, 2);
+  assert(a==b == false);
+  assert(a!=b == true);
+
+  b[1] = 1;
+  assert(a==b == true);
+  assert(a!=b == false);
+
+  a[1] = 2;
+  assert(a==b == false);
+  assert(a!=b == true);
+}

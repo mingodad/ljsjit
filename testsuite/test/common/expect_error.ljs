@@ -1,0 +1,16 @@
+return function(f, msg) {
+  var ok, err = pcall(f);
+  if( ok ) { error("error check unexpectedly succeeded", 2); }
+  if( msg ) {
+    if( type(err) != "string" ) {
+      error("error check failed with "..tostring(err), 2);
+    }
+    var line, err2 = string.match(err, ":(%d*): (.*)");
+    if( err2 != msg ) {
+      if( err2->gsub(" got no value", " got nil") == msg ) {
+        return;
+      }
+      error("error check failed with "..err, 2);
+    }
+  }
+};

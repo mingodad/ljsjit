@@ -1,0 +1,118 @@
+var function create(arith, v1, v2) {
+  var meta = {
+    __add=function(a,b) { return arith("add", a, b); },
+    __sub=function(a,b) { return arith("sub", a, b); },
+    __mul=function(a,b) { return arith("mul", a, b); },
+    __div=function(a,b) { return arith("div", a, b); },
+    __mod=function(a,b) { return arith("mod", a, b); },
+    __pow=function(a,b) { return arith("pow", a, b); },
+    __unm=function(a,b) { return arith("unm", a, b); },
+  };
+  return setmetatable({v1}, meta), setmetatable({v2}, meta);
+}
+
+{ //- op
+  var a, b = create(function(op,a,b) { return op; });
+  assert(a+b == "add");
+  assert(a-b == "sub");
+  assert(a*b == "mul");
+  assert(a/b == "div");
+  assert(a%b == "mod");
+  assert(a**b == "pow");
+  assert(-a == "unm");
+}
+
+{ //- lhs
+  var a, b = create(function(op,a,b) { return a[1]; }, "foo", 42);
+  assert(a+b == "foo");
+  assert(a-b == "foo");
+  assert(a*b == "foo");
+  assert(a/b == "foo");
+  assert(a%b == "foo");
+  assert(a**b == "foo");
+  assert(-a == "foo");
+}
+
+{ //- rhs
+  var a, b = create(function(op,a,b) { return b[1]; }, 42, "foo");
+  assert(a+b == "foo");
+  assert(a-b == "foo");
+  assert(a*b == "foo");
+  assert(a/b == "foo");
+  assert(a%b == "foo");
+  assert(a**b == "foo");
+  assert(-a == 42);
+}
+
+{ //- meta only lhs
+  var a, b = create(function(op,a,b) { return a[1]+b; }, 39), 3;
+  assert(a+b == 42);
+  assert(a-b == 42);
+  assert(a*b == 42);
+  assert(a/b == 42);
+  assert(a%b == 42);
+  assert(a**b == 42);
+}
+
+{ //- meta only rhs
+  var a, b = 39, create(function(op,a,b) { return a+b[1]; }, 3);
+  assert(a+b == 42);
+  assert(a-b == 42);
+  assert(a*b == 42);
+  assert(a/b == 42);
+  assert(a%b == 42);
+  assert(a**b == 42);
+}
+
+{ //- defaults string, int
+  var a, b = "39", 3;
+  assert(a+b == 42);
+  assert(a-b == 36);
+  assert(a*b == 117);
+  assert(a/b == 13);
+  assert(a%b == 0);
+  assert(a**b == 59319);
+  assert(-a == -39);
+}
+
+{ //- defaults int, string
+  var a, b = 39, "3";
+  assert(a+b == 42);
+  assert(a-b == 36);
+  assert(a*b == 117);
+  assert(a/b == 13);
+  assert(a%b == 0);
+  assert(a**b == 59319);
+  assert(-a == -39);
+}
+
+{ //- defaults string, string
+  var a, b = "39", "3";
+  assert(a+b == 42);
+  assert(a-b == 36);
+  assert(a*b == 117);
+  assert(a/b == 13);
+  assert(a%b == 0);
+  assert(a**b == 59319);
+  assert(-a == -39);
+}
+
+{ //- defaults string, kint
+  var a = "39";
+  assert(a+3 == 42);
+  assert(a-3 == 36);
+  assert(a*3 == 117);
+  assert(a/3 == 13);
+  assert(a%3 == 0);
+  assert(a**3 == 59319);
+}
+
+{ //- defaults kint, string
+  var b = "3";
+  assert(39+b == 42);
+  assert(39-b == 36);
+  assert(39*b == 117);
+  assert(39/b == 13);
+  assert(39%b == 0);
+  assert(39**b == 59319);
+}

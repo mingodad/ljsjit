@@ -1,0 +1,14 @@
+var len = string.len;
+var expect_error = require("common.expect_error");
+
+{ //- smoke
+  assert(len("abc") == 3);
+  assert(len(123) == 3);
+}
+
+{ //- argcheck
+  expect_error(function() { len(); },
+      "bad argument #1 to 'len' (string expected, got null)");
+  expect_error(function() { len(false); },
+      "bad argument #1 to 'len' (string expected, got boolean)");
+}

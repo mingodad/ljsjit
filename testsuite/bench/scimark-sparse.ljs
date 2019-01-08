@@ -1,0 +1,1 @@
+require("scimark_lib").SPARSE(1000, 5000)(tonumber(arg && arg[1]) || 150000);

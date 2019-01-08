@@ -1,0 +1,7 @@
+var t={};
+for( i=1,20000 ) {
+  t[i] = tostring(i);
+}
+for( i=1,#t ) {
+  assert(t[i] == tostring(i));
+}

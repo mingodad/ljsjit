@@ -1,0 +1,13 @@
+var reverse = string.reverse;
+
+{ //- misc
+  var y;
+  for( i=1,100 ) { y = reverse("abc"); }
+  assert(y == "cba");
+  var x = "abcd";
+  for( i=1,100 ) { y = reverse(x); }
+  assert(y == "dcba");
+  x = 1234;
+  for( i=1,100 ) { y = reverse(x); }
+  assert(y == "4321");
+}

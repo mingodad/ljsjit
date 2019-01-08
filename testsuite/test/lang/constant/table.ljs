@@ -1,0 +1,15 @@
+
+{ //- tnew
+  var a = null;
+  var b = {};
+  var t = {[true] = a, [false] = b || 1};
+  assert(t[true] == null);
+  assert(t[false] == b);
+}
+
+{ //- tdup
+  var b = {};
+  var t = {[true] = null, [false] = b || 1};
+  assert(t[true] == null);
+  assert(t[false] == b);
+}

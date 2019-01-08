@@ -1,0 +1,47 @@
+
+// Do not run this test unless the JIT compiler is turned off.
+if( jit && jit.status && jit.status() ) { return; }
+
+var caught, caught_line, caught_mm;
+
+var function gcmeta() {
+  if( caught != "end" ) {
+//    print(debug.traceback())
+    // This may point to the wrong instruction if in a JIT trace.
+    // But there's no guarantee if, when or where any GC steps occur.
+    var dbg = debug.getinfo(2);
+    caught_line = dbg.currentline;
+    caught_mm = debug.getinfo(1).name;
+    caught = true;
+  }
+}
+
+var function testgc(mm, f) {
+  collectgarbage();
+  caught = false;
+  var u = newproxy(true);
+  getmetatable(u).__gc = gcmeta;
+  u = null;
+  for( i=1,100000 ) {
+    f(i);
+    // This check may be hoisted. __gc is not supposed to have side-effects.
+    if( caught ) { break; }
+  }
+  if( ! caught ) {
+    error(mm.." metamethod not called", 2);
+  }
+  if( type(caught_line) != "number" || caught_line < 0 ) {
+    error("bad linenumber in debug info", 2);
+  }
+  if( caught_mm != mm ) {
+    error("bad name for metamethod in debug info", 2);
+  }
+}
+
+var x;
+testgc("__gc", function(i) { x = {}; });
+testgc("__gc", function(i) { x = {1}; });
+testgc("__gc", function(i) { x = function() { }; });
+testgc("__concat", function(i) { x = i..""; });
+
+caught = "end";

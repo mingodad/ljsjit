@@ -1,0 +1,60 @@
+{ //- table 1
+  var t=setmetatable({}, {__index=function(t,k) {
+    return 100-k;
+  }});
+
+  for( i=1,100 ) { assert(t[i] == 100-i); }
+
+  for( i=1,100 ) { t[i] = i; }
+  for( i=1,100 ) { assert(t[i] == i); }
+
+  for( i=1,100 ) { t[i] = null; }
+  for( i=1,100 ) { assert(t[i] == 100-i); }
+}
+
+{ //- table 2
+  var x;
+  var t2=setmetatable({}, {__index=function(t,k) {
+    x = k;
+  }});
+
+  assert(t2[1] == null);
+  assert(x == 1);
+
+  assert(t2.foo == null);
+  assert(x == "foo");
+}
+
+{ //- userdata +lua<5.2
+  var u = newproxy(true);
+  getmetatable(u).__index = { foo = u, bar = 42 };
+
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   u.bar;
+    u = u.foo;
+  }
+  assert(x == 4200);
+
+  x = 0;
+  for( i=1,100 ) {
+    u = u.foo;
+    x +=   u.bar;
+  }
+  assert(x == 4200);
+}
+
+{ //- string
+  var s = "foo";
+  var mt = debug.getmetatable(s);
+  debug.setmetatable(s, {__index = {s = s, len = string.len}});
+  var x = 0;
+  var t = {};
+  for( i=1,100 ) {
+    x +=   s->len();
+    s = s.s;
+    t[s] = t; // Hash store with same type prevents hoisting
+  }
+  debug.setmetatable(s, mt);
+  assert(x == 300);
+}

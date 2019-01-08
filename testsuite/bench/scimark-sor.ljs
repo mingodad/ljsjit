@@ -1,0 +1,1 @@
+require("scimark_lib").SOR(100)(tonumber(arg && arg[1]) || 50000);

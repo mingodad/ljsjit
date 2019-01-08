@@ -1,0 +1,46 @@
+var assert = assert;
+
+{ //- local
+  var a, b, c;
+  a, b, c = 0, 1;
+  assert(a == 0);
+  assert(b == 1);
+  assert(c == null);
+  a, b = a+1, b+1, a+b;
+  assert(a == 1);
+  assert(b == 2);
+  a, b, c = 0;
+  assert(a == 0);
+  assert(b == null);
+  assert(c == null);
+}
+
+{ //- global !private_G
+  a, b, c = 0, 1;
+  assert(a == 0);
+  assert(b == 1);
+  assert(c == null);
+  a, b = a+1, b+1, a+b;
+  assert(a == 1);
+  assert(b == 2);
+  a, b, c = 0;
+  assert(a == 0);
+  assert(b == null);
+  assert(c == null);
+}
+
+{ //- local lhs in key on lhs
+  var a = {};
+  var i = 3;
+  i, a[i] = i+1, 20;
+  assert(i == 4);
+  assert(a[3] == 20);
+}
+
+{ //- global lhs in key on lhs !private_G
+  a = {};
+  i = 3;
+  i, a[i] = i+1, 20;
+  assert(i == 4);
+  assert(a[3] == 20);
+}

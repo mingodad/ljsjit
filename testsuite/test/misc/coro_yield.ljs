@@ -1,0 +1,111 @@
+var create = coroutine.create;
+var wrap = coroutine.wrap;
+var resume = coroutine.resume;
+var yield = coroutine.yield;
+
+// Test stack overflow handling on return from coroutine.
+{
+  wrap(function() {
+    var co = create(function() {
+      yield(string.byte(string.rep(" ", 100), 1, 100));
+    });
+    assert(select('#', resume(co)) == 101);
+  })();
+}
+
+{
+  wrap(function() {
+    var f = wrap(function() {
+      yield(string.byte(string.rep(" ", 100), 1, 100));
+    });
+    assert(select('#', f()) == 100);
+  })();
+}
+
+{
+  var function cogen(x) {
+    return wrap(function(n) { do { x += n; n = yield(x); } while(!( false) ); }),
+	   wrap(function(n) { do { x *= n; n = yield(x); } while(!( false) ); });
+  }
+
+  var a,b=cogen(3);
+  var c,d=cogen(5);
+  assert(d(b(c(a(d(b(c(a(1)))))))) == 168428160);
+}
+
+{
+  var function verify(what, expect, ...) {
+    var got = {...};
+    for( i=1,100 ) {
+      if( expect[i] != got[i] ) {
+	error("FAIL " .. what);
+      }
+      if( expect[i] == null ) {
+	break;
+      }
+    }
+  }
+
+  var function cofunc(...) {
+    verify("call", { 1, "foo" }, ...);
+    verify("yield", { "bar" }, yield(2, "test"));
+    verify("pcall yield", { true, "again" }, pcall(yield, "from pcall"));
+    return "end";
+  }
+
+  var co = create(cofunc);
+  verify("resume", { true, 2, "test" }, resume(co, 1, "foo"));
+  verify("resume pcall", { true, "from pcall" }, resume(co, "bar"));
+  verify("resume end", { true, "end" }, resume(co, "again"));
+}
+
+{
+  var function verify(expect, func, ...) {
+    var co = create(func);
+    for( i=1,100 ) {
+      var ok, res = resume(co, ...);
+      if( ! ok ) {
+	if( expect[i] != null ) {
+	  error("too few results: ["..i.."] = "..tostring(expect[i]).." (got: "..tostring(res)..")");
+	}
+	break;
+      }
+      if( expect[i] != res ) {
+	error("bad result: ["..i.."] = "..tostring(res).." (should be: "..tostring(expect[i])..")");
+      }
+    }
+  }
+
+  verify({ 42, 99 },
+    function(x) { pcall(yield, x); return 99; },
+    42);
+
+  verify({ 42, 99 },
+    function(x) { pcall(function(y) { yield(y); }, x); return 99; },
+    42);
+
+  verify({ 42, 99 },
+    function(x) { xpcall(yield, debug.traceback, x); return 99; },
+    42);
+
+  verify({ 45, 44, 43, 42, 99 },
+    function(x, y) {
+      for( i in
+	function(o, k) {
+	  yield(o+k);
+	  if( k != 0 ) { return k-1; }
+	},x,y ) {
+      }
+      return 99;
+    },
+    42, 3);
+
+  verify({ 84, 99 },
+    function(x) {
+      var o = setmetatable({ x },
+	{__add = function(a, b) { yield(a[1]+b[1]); return 99; } });
+      return o+o;
+    },
+    42);
+}
+

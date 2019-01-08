@@ -1,0 +1,31 @@
+var loadstring = loadstring || load;
+
+{ //- Must unpatch modified bytecode with ILOOP/JLOOP etc.
+  var function foo() {
+    var t = {};
+    for( i=1,100 ) { t[i] = i; }
+    for( a,b in ipairs(t) ) { }
+    var m = 0;
+    while( m < 100 ) { ++m    ; }
+  }
+
+  var d1 = string.dump(foo);
+  foo();
+  assert(string.dump(foo) == d1);
+  if( jit ) { jit.off(foo); }
+  foo();
+  assert(string.dump(foo) == d1);
+  var d2 = string.dump(loadstring(d1, ""), true);
+  var d3 = string.dump(assert(loadstring(d2, "")), true);
+  assert(d2 == d3);
+  assert(loadstring(string.dump(assert(loadstring(d2, "")))));
+}
+
+{ //- roundtrip constants
+  var function f1() { return -0x80000000; }
+  var function f2() { return 0.971234567; }
+  assert(f1() == -0x80000000);
+  assert(loadstring(string.dump(f1), "")() == -0x80000000);
+  assert(f2() == 0.971234567);
+  assert(loadstring(string.dump(f2), "")() == 0.971234567);
+}

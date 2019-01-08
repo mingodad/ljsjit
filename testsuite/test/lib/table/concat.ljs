@@ -1,0 +1,55 @@
+var concat, assert, pcall = table.concat, assert, pcall;
+
+{ //- table.concat
+  var t = {a=1,b=2,c=3,d=4,e=5};
+  t[1] = 4;
+  t[3] = 6;
+  var ok, err = pcall(concat, t, "", 1, 3);
+  assert(! ok && err->match("index 2 "));
+  var q = {};
+  for( i=1,100 ) { q[i] = {9,8,7}; }
+  q[90] = t;
+  for( i=1,100 ) {
+    assert(pcall(concat, q[i], "", 1, 3) == (i != 90));
+  }
+  t[2] = 5; // index 1 - 3 in hash part
+  q[91] = {};
+  q[92] = {9};
+  for( i=1,100 ) { q[i] = concat(q[i], "x"); }
+  assert(q[90] == "4x5x6");
+  assert(q[91] == "");
+  assert(q[92] == "9");
+  assert(q[93] == "9x8x7");
+}
+
+{ //- table.concat must inhibit CSE and DSE
+  var t = {1,2,3};
+  var y, z;
+  for( i=1,100 ) {
+    y = concat(t, "x", 1, 3);
+    t[2] = i;
+    z = concat(t, "x", 1, 3);
+  }
+  assert(y == "1x99x3");
+  assert(z == "1x100x3");
+}
+
+{ //- table.concat must inhibit CSE and DSE 2
+  var y;
+  for( i=1,100 ) {
+    var t = {1,2,3};
+    t[2] = 4;
+    y = concat(t, "x");
+    t[2] = 9;
+  }
+  assert(y == "1x4x3");
+}
+
+{ //- table.concat must inhibit CSE and DSE 3
+  var t = {[0]={}, {}, {}, {}};
+  for( i=1,30 ) {
+    for( j=3,0,-1 ) {
+      t[j].x = t[j-1];
+    }
+  }
+}

@@ -1,0 +1,96 @@
+
+var nan = 0/0;
+var t = {};
+for( i=1,100 ) { t[i] = i+0.5; }
+for( i=101,200 ) { t[i] = nan; }
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( t[i] > 1000 ) { z=i; } }
+  assert(z == 0);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( ! (t[i] < 1000) ) { z=i; } }
+  assert(z == 200);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( t[i] <= 1000 ) { z=i; } }
+  assert(z == 100);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( ! (t[i] >= 1000) ) { z=i; } }
+  assert(z == 200);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( t[i] > 0 ) { z=i; } }
+  assert(z == 100);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( ! (t[i] < 0) ) { z=i; } }
+  assert(z == 200);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( t[i] <= 0 ) { z=i; } }
+  assert(z == 0);
+}
+
+{
+  var z = 0;
+  for( i=1,200 ) { if( ! (t[i] >= 0) ) { z=i; } }
+  assert(z == 200);
+}
+
+{ var z; for( i=1,100 ) { z = 0/0; }; assert(z != z); }
+
+{ var z; for( i=1,100 ) { z = nan == nan; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = nan == 1; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = 1 == nan; }; assert(z == false); }
+
+{ var z; for( i=1,100 ) { z = nan != nan; }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = nan != 1; }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = 1 != nan; }; assert(z == true); }
+
+{ var z; for( i=1,100 ) { z = nan < nan; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = nan < 1; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = 1 < nan; }; assert(z == false); }
+
+{ var z; for( i=1,100 ) { z = ! (nan < nan); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (nan < 1); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (1 < nan); }; assert(z == true); }
+
+{ var z; for( i=1,100 ) { z = nan > nan; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = nan > 1; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = 1 > nan; }; assert(z == false); }
+
+{ var z; for( i=1,100 ) { z = ! (nan > nan); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (nan > 1); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (1 > nan); }; assert(z == true); }
+
+{ var z; for( i=1,100 ) { z = nan <= nan; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = nan <= 1; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = 1 <= nan; }; assert(z == false); }
+
+{ var z; for( i=1,100 ) { z = ! (nan <= nan); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (nan <= 1); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (1 <= nan); }; assert(z == true); }
+
+{ var z; for( i=1,100 ) { z = nan >= nan; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = nan >= 1; }; assert(z == false); }
+{ var z; for( i=1,100 ) { z = 1 >= nan; }; assert(z == false); }
+
+{ var z; for( i=1,100 ) { z = ! (nan >= nan); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (nan >= 1); }; assert(z == true); }
+{ var z; for( i=1,100 ) { z = ! (1 >= nan); }; assert(z == true); }
+

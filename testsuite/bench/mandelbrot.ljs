@@ -1,0 +1,23 @@
+
+var write, char, unpack = io.write, string.char, unpack;
+var N = tonumber(arg && arg[1]) || 100;
+var M, ba, bb, buf = 2/N, 2**(N%8+1)-1, 2**(8-N%8), {};
+write("P4\n", N, " ", N, "\n");
+for( y=0,N-1 ) {
+  var Ci, b, p = y*M-1, 1, 0;
+  for( x=0,N-1 ) {
+    var Cr = x*M-1.5;
+    var Zr, Zi, Zrq, Ziq = Cr, Ci, Cr*Cr, Ci*Ci;
+    b +=   b;
+    for( i=1,49 ) {
+      Zi = Zr*Zi*2 + Ci;
+      Zr = Zrq-Ziq + Cr;
+      Ziq = Zi*Zi;
+      Zrq = Zr*Zr;
+      if( Zrq+Ziq > 4.0 ) { ++b    ; break; }
+    }
+    if( b >= 256 ) { ++p    ; buf[p] = 511 - b; b = 1; }
+  }
+  if( b != 1 ) { ++p    ; buf[p] = (ba-b)*bb; }
+  write(char(unpack(buf, 1, p)));
+}

@@ -1,0 +1,31 @@
+
+// Ambiguous syntax: function call vs. new statement.
+if( os.getenv("LUA52") ) {
+  assert(assert(loadstring([=[
+var function f() {return 99; }
+return f;
+()
+]=]))() == 99);
+} else {
+  assert(loadstring([=[
+var function f() {return 99; }
+return f;
+()
+]=]) == null);
+}
+
+// UTF-8 identifiers.
+assert(loadstring([=[
+var ä = 1;
+var aäa = 2;
+var äöü·€晶 = 3;
+
+assert(ä == 1)
+assert(aäa == 2)
+assert(äöü·€晶 == 3)
+
+assert(#"ä" == 2)
+assert(#"aäa" == 4)
+assert(#"äöü·€晶" == 14)
+]=]))();
+

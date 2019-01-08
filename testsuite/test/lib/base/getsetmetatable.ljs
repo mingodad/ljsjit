@@ -1,0 +1,33 @@
+
+{ //- get __metatable
+  var t = setmetatable({}, { __metatable = "foo" });
+  for( i=1,100 ) { assert(getmetatable(t) == "foo"); }
+}
+
+{ //- jit smoke
+  var mt = {};
+  var t = setmetatable({}, mt);
+  for( i=1,100 ) { assert(getmetatable(t) == mt); }
+  for( i=1,100 ) { assert(setmetatable(t, mt) == t); }
+}
+
+{ //- jit assorted
+  var mt = {};
+  var t = {};
+  for( i=1,200 ) { t[i] = setmetatable({}, mt); }
+  t[150] = setmetatable({}, { __metatable = "foo" });
+  for( i=1,200 ) {
+    if( ! pcall(setmetatable, t[i], mt) ) { assert(i == 150); }
+  }
+  for( i=1,200 ) { assert(getmetatable(t[i]) == mt || i == 150); }
+  for( i=1,200 ) {
+    if( ! pcall(setmetatable, t[i], null) ) { assert(i == 150); }
+  }
+  for( i=1,200 ) { assert(getmetatable(t[i]) == null || i == 150); }
+}
+
+{ //- jit get primitive metatable
+  var x = true;
+  for( i=1,100 ) { x = getmetatable(i); }
+  assert(x == null);
+}

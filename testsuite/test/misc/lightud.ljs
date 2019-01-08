@@ -1,0 +1,88 @@
+var ctest = require("ctest");
+
+var lightud = ctest.lightud;
+var assert = assert;
+
+// x64 lightud tests
+if( jit && jit.arch == "x64" ) {
+  {
+    var ud1 = lightud(0x12345678);
+    var ud2 = lightud(0x12345678);
+    assert(ud1 == ud2);
+    assert(tostring(ud1) == "userdata: 0x12345678");
+  }
+  {
+    var ud1 = lightud(1);
+    var ud2 = lightud(2);
+    assert(ud1 != ud2);
+  }
+  {
+    var ud1 = lightud(2**47-1);
+    var ud2 = lightud(2**47-1);
+    assert(ud1 == ud2);
+    assert(tostring(ud1) == "userdata: 0x7fffffffffff");
+  }
+  {
+    var ud1 = lightud(0x12345678+123*2**32);
+    var ud2 = lightud(0x12345678+456*2**32);
+    for( i=1,100 ) { assert(ud1 != ud2); }
+  }
+  assert(tostring(lightud(0x5abc*2**32 + 0xdef01234)) == "userdata: 0x5abcdef01234");
+  assert(pcall(lightud, 2**47) == false);
+  assert(pcall(lightud, 2**64-2048) == false);
+}
+
+assert(getmetatable(lightud(1)) == null);
+
+// lightuserdata SLOAD value and HREF key
+{
+  var ud = lightud(12345);
+  var t = {[ud] = 42};
+  for( i=1,100 ) {
+    assert(t[ud] == 42);
+  }
+}
+
+// lightuserdata NEWREF key
+{
+  var ud = lightud(12345);
+  for( i=1,100 ) {
+    var t = {[ud] = 42};
+    assert(t[ud] == 42);
+  }
+}
+
+// lightuserdata ASTORE/HSTORE value
+{
+  var ud = lightud(12345);
+  var t = {};
+  for( i=1,100 ) {
+    t[i] = ud;
+  }
+  assert(t[100] == ud);
+}
+
+// lightuserdata sync to stack
+{
+  var ud = lightud(12345);
+  var x = null;
+  for( j=1,20 ) {
+    for( i=1,50 ) {
+      x = ud;
+    }
+    assert(x == ud);
+  }
+}
+
+// lightuserdata vs. number type check
+{
+  var t = {};
+  for( i=1,200 ) { t[i] = i; }
+  t[180] = lightud(12345);
+  var x = 0;
+  assert(! pcall(function(t) {
+    for( i=1,200 ) { x +=   t[i]; }
+  }, t));
+  assert(x == 16110);
+}
+

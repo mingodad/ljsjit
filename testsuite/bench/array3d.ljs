@@ -1,0 +1,59 @@
+
+var function array_set(this, x, y, z, p) {
+  assert(x >= 0 && x < this.nx, "x outside PA");
+  assert(y >= 0 && y < this.ny, "y outside PA");
+  assert(z >= 0 && z < this.nz, "z outside PA");
+  var pos = (z*this.ny + y)*this.nx + x;
+  var image = this.image;
+  if( this.packed ) {
+    var maxv = this.max_voltage;
+    if( p > maxv ) { this.max_voltage = p*2.0; }
+    var oldp = image[pos] || 0.0; // Works with uninitialized table, too
+    if( oldp > maxv ) { p = p + maxv*2.0; }
+    image[pos] = p;
+  } else {
+    image[pos] = p;
+  }
+  this.changed = true;
+  this.changed_recently = true;
+}
+
+var function array_points(this) {
+  var y, z = 0, 0;
+  return function(this, x) {
+    ++x    ;
+    if( x >= this.nx ) {
+      x = 0;
+      ++y    ;
+      if( y >= this.ny ) {
+	y = 0;
+	++z    ;
+	if( z >= this.nz ) {
+	  return null, null, null;
+	}
+      }
+    }
+    return x, y, z;
+  }, this, 0;
+}
+
+var function array_new(nx, ny, nz, packed) {
+  return {
+    nx = nx, ny = ny, nz = nz,
+    packed = packed, max_voltage = 0.0,
+    changed = false, changed_recently = false,
+    image = {}, // Preferably use a fixed-type, pre-sized array here.
+    set = array_set,
+    points = array_points,
+  };
+}
+
+var dim = tonumber(arg && arg[1]) || 300; // Array dimension dim^3
+var packed = arg && arg[2] == "packed";   // Packed image or flat
+var arr = array_new(dim, dim, dim, packed);
+
+for( x,y,z in arr->points() ) {
+  arr->set(x, y, z, x*x);
+}
+assert(arr.image[dim**3-1] == (dim-1)**2);
+

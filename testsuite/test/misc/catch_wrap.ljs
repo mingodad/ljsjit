@@ -1,0 +1,45 @@
+
+var cp = require("cpptest");
+cp.wrapon();
+
+{
+  var a, b = pcall(cp.catch, function() { return "x"; });
+  assert(a == true && b == "x");
+}
+
+{
+  var a, b = pcall(function() { cp.throw("foo"); });
+  assert(a == false && b == "foo");
+}
+
+var unwind;
+{
+  var a, b = pcall(cp.catch, function() { cp.throw("foo"); });
+  unwind = a;
+  assert((a == false && b == "foo") || (a == true && b == "catch ..."));
+}
+
+{
+  var st = cp.alloc(function() { return cp.isalloc(); });
+  assert(st == true);
+  assert(cp.isalloc() == false);
+}
+
+{
+  var a, b = pcall(cp.alloc, function() {
+    assert(cp.isalloc() == true);
+    return "foo", cp.throw;
+  });
+  assert(a == false && b == "foo");
+  assert(cp.isalloc() == false);
+}
+
+{
+  var a, b = pcall(cp.alloc, function() {
+    assert(cp.isalloc() == true);
+    return "foo", error;
+  });
+  assert(a == false && b == "foo");
+  if( unwind ) { assert(cp.isalloc() == false); }
+}
+

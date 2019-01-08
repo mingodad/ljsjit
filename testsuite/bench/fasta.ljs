@@ -1,0 +1,95 @@
+
+var Last = 42;
+var function random(max) {
+  var y = (Last * 3877 + 29573) % 139968;
+  Last = y;
+  return (max * y) / 139968;
+}
+
+var function make_repeat_fasta(id, desc, s, n) {
+  var write, sub = io.write, string.sub;
+  write(">", id, " ", desc, "\n");
+  var p, sn, s2 = 1, #s, s..s;
+  for( i=60,n,60 ) {
+    write(sub(s2, p, p + 59), "\n");
+    p +=   60; if( p > sn ) { p -=   sn; }
+  }
+  var tail = n % 60;
+  if( tail > 0 ) { write(sub(s2, p, p + tail-1), "\n"); }
+}
+
+var function make_random_fasta(id, desc, bs, n) {
+  io.write(">", id, " ", desc, "\n");
+  loadstring([=[
+    var write, char, unpack, n, random = io.write, string.char, unpack, ...;
+    var buf, p = {}, 1;
+    for( i=60,n,60 ) {
+      for( j=p,p+59 ) { ]=]..bs..[=[ }
+      buf[p+60] = 10; p = p + 61;
+      if( p >= 2048 ) { write(char(unpack(buf, 1, p-1))); p = 1; }
+    }
+    var tail = n % 60;
+    if( tail > 0 ) {
+      for( j=p,p+tail-1 ) { ]=]..bs..[=[ }
+      p = p + tail; buf[p] = 10; p = p + 1;
+    }
+    write(char(unpack(buf, 1, p-1)));
+  ]=], desc)(n, random);
+}
+
+var function bisect(c, p, lo, hi) {
+  var n = hi - lo;
+  if( n == 0 ) { return "buf[j] = "..c[hi]..";\n"; }
+  var mid = math.floor(n / 2);
+  return "if( r < "..p[lo+mid].." ) {\n"..bisect(c, p, lo, lo+mid)..
+         "} else {\n"..bisect(c, p, lo+mid+1, hi).."}\n";
+}
+
+var function make_bisect(tab) {
+  var c, p, sum = {}, {}, 0;
+  for( i,row in ipairs(tab) ) {
+    c[i] = string.byte(row[1]);
+    sum +=   row[2];
+    p[i] = sum;
+  }
+  return "var r = random(1);\n"..bisect(c, p, 1, #tab);
+}
+
+var alu =
+  "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG"..
+  "GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA"..
+  "CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT"..
+  "ACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCA"..
+  "GCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGG"..
+  "AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC"..
+  "AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA";
+
+var iub = make_bisect({
+  { "a", 0.27 },
+  { "c", 0.12 },
+  { "g", 0.12 },
+  { "t", 0.27 },
+  { "B", 0.02 },
+  { "D", 0.02 },
+  { "H", 0.02 },
+  { "K", 0.02 },
+  { "M", 0.02 },
+  { "N", 0.02 },
+  { "R", 0.02 },
+  { "S", 0.02 },
+  { "V", 0.02 },
+  { "W", 0.02 },
+  { "Y", 0.02 },
+});
+
+var homosapiens = make_bisect({
+  { "a", 0.3029549426680 },
+  { "c", 0.1979883004921 },
+  { "g", 0.1975473066391 },
+  { "t", 0.3015094502008 },
+});
+
+var N = tonumber(arg && arg[1]) || 1000;
+make_repeat_fasta('ONE', 'Homo sapiens alu', alu, N*2);
+make_random_fasta('TWO', 'IUB ambiguity codes', iub, N*3);
+make_random_fasta('THREE', 'Homo sapiens frequency', homosapiens, N*5);

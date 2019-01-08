@@ -1,0 +1,92 @@
+var band, bor = bit && bit.band, bit && bit.bor;
+var byte = string.byte;
+
+{ //- simple
+  var a, b = ("foo")->byte(1);
+  assert(type(a) == "number");
+  assert(b == null);
+  var c, d = ("foo")->byte(2, 3);
+  assert(type(c) == "number");
+  assert(c == d);
+  assert(c != a);
+}
+
+{ //- Fixed slice [i,i+k] or overflow +bit
+  var s = "abcdefg";
+  var x,y,z;
+  for( j=100,107 ) {
+    for( i=1,j ) { x,y,z = byte("abcdefg", band(i, 7), band(i+2, 7)); }
+    var a,b,c = byte("abcdefg", band(j, 7), band(j+2, 7));
+    assert(x == a && y == b && z == c);
+  }
+  for( j=100,107 ) {
+    for( i=1,j ) { x,y,z = byte(s, band(i, 7), band(i+2, 7)); }
+    var a,b,c = byte(s, band(j, 7), band(j+2, 7));
+    assert(x == a && y == b && z == c);
+  }
+}
+
+{ //- Positive slice [i,len] or overflow +bit
+  var s = "abc";
+  var x,y,z;
+  for( j=100,107 ) {
+    for( i=1,j ) { x,y,z = byte("abc", band(i, 7), -1); }
+    var a,b,c = byte("abc", band(j, 7), -1);
+    assert(x == a && y == b && z == c);
+  }
+  for( j=100,107 ) {
+    for( i=1,j ) { x,y,z = byte(s, band(i, 7), -1); }
+    var a,b,c = byte(s, band(j, 7), -1);
+    assert(x == a && y == b && z == c);
+  }
+}
+
+{ //- Negative slice [-i,len] or underflow +bit
+  var s = "abc";
+  var x,y,z;
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x,y,z = byte("abc", bor(i, -8), -1); }
+    var a,b,c = byte("abc", bor(j, -8), -1);
+    assert(x == a && y == b && z == c);
+  }
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x,y,z = byte(s, bor(i, -8), -1); }
+    var a,b,c = byte(s, bor(j, -8), -1);
+    assert(x == a && y == b && z == c);
+  }
+}
+
+{ //- Positive slice [1,i] or overflow +bit
+  var s = "abc";
+  var x,y,z;
+  for( j=100,107 ) {
+    for( i=1,j ) { x,y,z = byte("abc", 1, band(i, 7)); }
+    var a,b,c = byte("abc", 1, band(j, 7));
+    assert(x == a && y == b && z == c);
+  }
+  for( j=100,107 ) {
+    for( i=1,j ) { x,y,z = byte(s, 1, band(i, 7)); }
+    var a,b,c = byte(s, 1, band(j, 7));
+    assert(x == a && y == b && z == c);
+  }
+}
+
+{ //- Negative slice [1,-i] or underflow +bit
+  var s = "abc";
+  var x,y,z;
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x,y,z = byte("abc", 1, bor(i, -8)); }
+    var a,b,c = byte("abc", 1, bor(j, -8));
+    assert(x == a && y == b && z == c);
+  }
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x,y,z = byte(s, 1, bor(i, -8)); }
+    var a,b,c = byte(s, 1, bor(j, -8));
+    assert(x == a && y == b && z == c);
+  }
+}
+
+{ //- Check for slot stack overflow
+  var s = string.rep("x", 500);
+  for( i=1,100 ) { byte(s, 1, 500); }
+}

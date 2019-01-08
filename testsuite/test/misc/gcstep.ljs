@@ -1,0 +1,33 @@
+
+var function testgc(what, func) {
+  collectgarbage();
+  var oc = gcinfo();
+  func();
+  var nc = gcinfo();
+  assert(nc < oc*4, "GC step missing for "..what);
+}
+
+testgc("TNEW", function() {
+  for( i=1,10000 ) {
+    var t = {};
+  }
+});
+
+testgc("TDUP", function() {
+  for( i=1,10000 ) {
+    var t = {1};
+  }
+});
+
+testgc("FNEW", function() {
+  for( i=1,10000 ) {
+    var function f() { }
+  }
+});
+
+testgc("CAT", function() {
+  for( i=1,10000 ) {
+    var s = "x"..i;
+  }
+});
+

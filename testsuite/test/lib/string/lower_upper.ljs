@@ -1,0 +1,51 @@
+{ //- smoke
+  assert(("abc123DEF_<>")->lower() == "abc123def_<>");
+  assert(("abc123DEF_<>")->upper() == "ABC123DEF_<>");
+}
+
+{ //- repeated
+  var l = "the quick brown fox...";
+  var u = "THE QUICK BROWN FOX...";
+  var s = l;
+  for( i = 1, 75 ) {
+    s = s->upper();
+    assert(s == u);
+    s = s->lower();
+    assert(s == l);
+  }
+}
+
+{ //- repeated with growing string
+  var y, z;
+  var x = "aBcDe";
+  for( i=1,100 ) {
+    y = string.upper(x);
+    z = y.."fgh";
+  }
+  assert(y == "ABCDE");
+  assert(z == "ABCDEfgh");
+}
+
+{ //- misc upper
+  var y;
+  for( i=1,100 ) { y = string.upper("aBc9"); }
+  assert(y == "ABC9");
+  var x = ":abCd+";
+  for( i=1,100 ) { y = string.upper(x); }
+  assert(y == ":ABCD+");
+  x = 1234;
+  for( i=1,100 ) { y = string.upper(x); }
+  assert(y == "1234");
+}
+
+{ //- misc lower
+  var y;
+  for( i=1,100 ) { y = string.lower("aBc9"); }
+  assert(y == "abc9");
+  var x = ":abcd+";
+  for( i=1,100 ) { y = string.lower(x); }
+  assert(y == ":abcd+");
+  x = 1234;
+  for( i=1,100 ) { y = string.lower(x); }
+  assert(y == "1234");
+}

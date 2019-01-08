@@ -1,0 +1,17 @@
+{ //- _G 1
+  var ok, err = pcall(next, _G, 1);
+  assert(! ok);
+  ok, err = pcall(function() { next(_G, 1); });
+  assert(! ok);
+}
+
+{ //- as iterator
+  var t = { foo = 9, bar = 10, 4, 5, 6 };
+  var r = {};
+  var function dummy() { }
+  var function f(next) {
+    for( k,v in next,t,null ) { r[#r+1] = k; if( v == 5 ) { f(dummy); } }
+  }
+  f(next);
+  assert(#r == 5);
+}

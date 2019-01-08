@@ -1,0 +1,21 @@
+
+var function nsieve(p, m) {
+  for( i=2,m ) { p[i] = true; }
+  var count = 0;
+  for( i=2,m ) {
+    if( p[i] ) {
+      for( k=i+i,m,i ) { p[k] = false; }
+      ++count    ;
+    }
+  }
+  return count;
+}
+
+var N = tonumber(arg && arg[1]) || 1;
+if( N < 2 ) { N = 2; }
+var primes = {};
+
+for( i=0,2 ) {
+  var m = (2**(N-i))*10000;
+  io.write(string.format("Primes up to %8d %8d\n", m, nsieve(primes, m)));
+}

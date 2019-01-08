@@ -1,0 +1,107 @@
+var ffi = require("ffi");
+
+var compress, uncompress;
+
+if( ffi.abi("win") ) {
+
+  ffi.cdef([=[
+  int RtlGetCompressionWorkSpaceSize(uint16_t fmt,
+    unsigned long *wsbufsz, unsigned long *wsfragsz);
+  int RtlCompressBuffer(uint16_t fmt,
+    const uint8_t *src, unsigned long srclen,
+    uint8_t *dst, unsigned long dstsz,
+    unsigned long chunk, unsigned long *dstlen, void *workspace);
+  int RtlDecompressBuffer(uint16_t fmt,
+    uint8_t *dst, unsigned long dstsz,
+    const uint8_t *src, unsigned long srclen,
+    unsigned long *dstlen);
+  ]=]);
+
+  var ntdll = ffi.load("ntdll");
+
+  var fmt = 0x0102;
+  var workspace;
+  {
+    var res = ffi.new("unsigned long[2]");
+    ntdll.RtlGetCompressionWorkSpaceSize(fmt, res, res+1);
+    workspace = ffi.new("uint8_t[?]", res[0]);
+  }
+
+  function compress(txt) {
+    var buf = ffi.new("uint8_t[?]", 4096);
+    var buflen = ffi.new("unsigned long[1]");
+    var res = ntdll.RtlCompressBuffer(fmt, txt, #txt, buf, 4096,
+					4096, buflen, workspace);
+    assert(res == 0);
+    return ffi.string(buf, buflen[0]);
+  }
+
+  function uncompress(comp, n) {
+    var buf = ffi.new("uint8_t[?]", n);
+    var buflen = ffi.new("unsigned long[1]");
+    var res = ntdll.RtlDecompressBuffer(fmt, buf, n, comp, #comp, buflen);
+    assert(res == 0);
+    return ffi.string(buf, buflen[0]);
+  }
+
+} else {
+
+  ffi.cdef([=[
+  unsigned long compressBound(unsigned long sourceLen);
+  int compress2(uint8_t *dest, unsigned long *destLen,
+		const uint8_t *source, unsigned long sourceLen, int level);
+  int uncompress(uint8_t *dest, unsigned long *destLen,
+		 const uint8_t *source, unsigned long sourceLen);
+  ]=]);
+
+  var zlib = ffi.load("z");
+
+  function compress(txt) {
+    var n = tonumber(zlib.compressBound(#txt));
+    var buf = ffi.new("uint8_t[?]", n);
+    var buflen = ffi.new("unsigned long[1]", n);
+    var res = zlib.compress2(buf, buflen, txt, #txt, 9);
+    assert(res == 0);
+    return ffi.string(buf, tonumber(buflen[0]));
+  }
+
+  function uncompress(comp, n) {
+    var buf = ffi.new("uint8_t[?]", n);
+    var buflen = ffi.new("unsigned long[1]", n);
+    var res = zlib.uncompress(buf, buflen, comp, #comp);
+    assert(res == 0);
+    return ffi.string(buf, tonumber(buflen[0]));
+  }
+
+}
+
+  var txt = [=[Rebellious subjects, enemies to peace,
+Profaners of this neighbour-stained steel,--
+Will they not hear? What, ho! you men, you beasts,
+That quench the fire of your pernicious rage
+With purple fountains issuing from your veins,
+On pain of torture, from those bloody hands
+Throw your mistemper'd weapons to the ground,
+And hear the sentence of your moved prince.
+Three civil brawls, bred of an airy word,
+By thee, old Capulet, and Montague,
+Have thrice disturb'd the quiet of our streets,
+And made Verona's ancient citizens
+Cast by their grave beseeming ornaments,
+To wield old partisans, in hands as old,
+Canker'd with peace, to part your canker'd hate:
+If ever you disturb our streets again,
+Your lives shall pay the forfeit of the peace.
+For this time, all the rest depart away:
+You Capulet; shall go along with me:
+And, Montague, come you this afternoon,
+To know our further pleasure in this case,
+To old Free-town, our common judgment-place.
+Once more, on pain of death, all men depart.]=];
+txt = txt..txt..txt..txt;
+
+var c = compress(txt);
+assert(2*#c < #txt);
+var txt2 = uncompress(c, #txt);
+assert(txt2 == txt);
+

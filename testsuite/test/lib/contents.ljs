@@ -1,0 +1,155 @@
+var function check(m, expected, exclude) {
+  var t = {};
+  var ex = {};
+  if( exclude ) {
+    for( k in exclude->gmatch("[^:]+") ) {
+      ex[k] = true;
+    }
+  }
+  for( k in pairs(m) ) {
+    if( ! ex[k] ) {
+      t[#t+1] = tostring(k);
+    }
+  }
+  table.sort(t);
+  var got = table.concat(t, ":");
+  if( got != expected ) {
+    error("got: \""..got.."\"\nexpected: \""..expected.."\"", 2);
+  }
+}
+
+{ //- base
+  check(_G, "_G:_VERSION:arg:assert:collectgarbage:coroutine:debug:dofile:error:getmetatable:io:ipairs:load:loadfile:math:next:os:package:pairs:pcall:print:rawequal:rawget:rawset:require:select:setmetatable:string:table:tonumber:tostring:type:xpcall", "rawlen:bit:bit32:jit:gcinfo:setfenv:getfenv:loadstring:unpack:module:newproxy");
+}
+
+{ //- pre-5.2 base +lua<5.2
+  assert(gcinfo);
+  assert(setfenv);
+  assert(getfenv);
+  assert(loadstring);
+  assert(unpack);
+  assert(module);
+  assert(newproxy);
+}
+
+{ //- 5.2 base +lua>=5.2
+  assert(! gcinfo);
+  assert(! setfenv);
+  assert(! getfenv);
+  assert(! loadstring);
+  assert(! unpack);
+  assert(! module);
+  assert(! newproxy);
+}
+
+{ //- pre-5.2 base rawlen -compat5.2
+  assert(! rawlen);
+}
+
+{ //- 5.2 base rawlen +compat5.2
+  assert(rawlen);
+}
+
+{ //- math
+  check(math, "abs:acos:asin:atan:atan2:ceil:cos:cosh:deg:exp:floor:fmod:frexp:huge:ldexp:log:max:min:modf:pi:pow:rad:random:randomseed:sin:sinh:sqrt:tan:tanh", "log10:mod");
+}
+
+{ //- pre-5.2 math +lua<5.2 -compat5.2
+  assert(math.mod);
+  assert(math.log10);
+}
+
+{ //- 5.2 math +lua>=5.2
+  assert(! math.mod);
+  assert(! math.log10);
+}
+
+{ //- string
+  check(string, "byte:char:dump:find:format:gmatch:gsub:len:lower:match:rep:replace:reverse:sub:upper", "gfind");
+}
+
+{ //- pre-5.2 string +lua<5.2 -compat5.2
+  assert(string.gfind);
+}
+
+{ //- 5.2 string +lua>=5.2
+  assert(! string.gfind);
+}
+
+{ //- pre-5.2 table +lua<5.2
+  check(table, "concat:foreach:foreachi:getn:insert:maxn:move:remove:sort", "pack:unpack:setn:new");
+}
+
+{ //- 5.2 table +lua>=5.2
+  check(table, "concat:insert:pack:remove:sort:unpack");
+}
+
+{ //- pre-5.2 table.pack -compat5.2
+  assert(! table.pack);
+  assert(! table.unpack);
+}
+
+{ //- 5.2 table.pack +compat5.2
+  assert(table.pack);
+  assert(table.unpack);
+}
+
+{ //- io
+  check(io, "close:flush:input:lines:open:output:popen:read:stderr:stdin:stdout:tmpfile:type:write");
+}
+
+{ //- io file
+  check(debug.getmetatable(io.stdin), "__gc:__index:__tostring:close:flush:lines:read:seek:setvbuf:write");
+}
+
+{ //- os
+  check(os, "clock:date:difftime:execute:exit:getenv:remove:rename:setlocale:time:tmpname");
+}
+
+{ //- debug
+  check(debug, "debug:gethook:getinfo:getlocal:getmetatable:getregistry:getupvalue:sethook:setlocal:setmetatable:setupvalue:traceback", "getfenv:setfenv:upvalueid:upvaluejoin:getuservalue:setuservalue");
+}
+
+// TODO: Check versional differences in debug library
+
+{ //- package
+  check(package, "config:cpath:loaded:loadlib:path:preload", "searchpath:loaders:searchers:seeall");
+}
+
+{ //- pre-5.2 package +lua<5.2
+  assert(package.loaders);
+  assert(! package.searchers);
+  assert(package.seeall);
+}
+
+{ //- 5.2 package +lua>=5.2
+  assert(! package.loaders);
+  assert(package.searchers);
+  assert(! package.seeall);
+}
+
+{ //- package.loaders
+  check(package.loaders || package.searchers, "1:2:3:4");
+}
+
+{ //- package.loaded
+  var loaded = {};
+  for( k, v in pairs(package.loaded) ) {
+    if( type(k) != "string" || (k->sub(1, 7) != "common." && k->sub(1, 4) != "jit.") ) {
+      loaded[k] = v;
+    }
+  }
+  check(loaded, "_G:coroutine:debug:io:math:os:package:string:table", "bit:bit32:common:ffi:jit:table.new");
+}
+
+{ //- bit +bit
+  check(bit, "arshift:band:bnot:bor:bswap:bxor:lshift:rol:ror:rshift:tobit:tohex");
+}
+
+{ //- ffi +ffi
+  check(require("ffi"), "C:abi:alignof:arch:cast:cdef:copy:errno:fill:gc:istype:load:metatype:new:offsetof:os:sizeof:string:typeof", "typeinfo");
+}
+
+{ //- ffi 2.1 +fii +luajit>=2.1
+  assert(require("ffi").typeinfo);
+}

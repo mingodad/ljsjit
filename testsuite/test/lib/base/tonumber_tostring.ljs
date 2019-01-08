@@ -1,0 +1,81 @@
+
+{ //- tonumber int
+  var x = 0;
+  for( i=1,100 ) { x +=   tonumber(i); }
+  assert(x == 5050);
+}
+
+{ //- tonumber float
+  var x = 0;
+  for( i=1.5,100.5 ) { x +=   tonumber(i); }
+  assert(x == 5100);
+}
+
+{ //- tostring int / tonumber
+  var t = {};
+  for( i=1,100 ) { t[i] = tostring(i); }
+  var x = 0;
+  for( i=1,100 ) { assert(type(t[i]) == "string"); x +=   tonumber(t[i]); }
+  assert(x == 5050);
+}
+
+{ //- tostring float / tonumber
+  var t = {};
+  for( i=1,100 ) { t[i] = tostring(i+0.5); }
+  var x = 0;
+  for( i=1,100 ) { assert(type(t[i]) == "string"); x +=   tonumber(t[i]); }
+  assert(x == 5100);
+}
+
+{ //- tonumber table
+  for( i=1,100 ) { assert(tonumber({}) == null); }
+}
+
+{ //- tostring int / tostring
+  var t = {};
+  for( i=1,100 ) { t[i] = tostring(i); }
+  for( i=1,100 ) { t[i] = tostring(t[i]); }
+  var x = 0;
+  for( i=1,100 ) { assert(type(t[i]) == "string"); x +=   t[i]; }
+  assert(x == 5050);
+}
+
+{ //- tostring table __tostring
+  var mt = { __tostring = function(t) { return tostring(t[1]); } };
+  var t = {};
+  for( i=1,100 ) { t[i] = setmetatable({i}, mt); }
+  for( i=1,100 ) { t[i] = tostring(t[i]); }
+  var x = 0;
+  for( i=1,100 ) { assert(type(t[i]) == "string"); x +=   t[i]; }
+  assert(x == 5050);
+}
+
+{ //- tostring table __tostring __call
+  var r = setmetatable({},
+			 { __call = function(x, t) { return tostring(t[1]); } });
+  var mt = { __tostring = r };
+  var t = {};
+  for( i=1,100 ) { t[i] = setmetatable({i}, mt); }
+  for( i=1,100 ) { t[i] = tostring(t[i]); }
+  var x = 0;
+  for( i=1,100 ) { assert(type(t[i]) == "string"); x +=   t[i]; }
+  assert(x == 5050);
+}
+
+{ //- print calls overridden tostring +lua<5.2
+  var x = false;
+  var co = coroutine.create(function() { print(1); });
+  debug.setfenv(co, setmetatable({}, { __index = {
+    tostring = function() { x = true; } }}));
+  coroutine.resume(co);
+  assert(x == true);
+}
+
+{ //- tonumber base 2
+  assert(tonumber(111, 2) == 7);
+}
+
+{ //- __tostring must be callable
+  var t = setmetatable({}, { __tostring = "" });
+  assert(pcall(function() { tostring(t); }) == false);
+}

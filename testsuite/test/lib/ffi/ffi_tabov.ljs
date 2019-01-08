@@ -1,0 +1,12 @@
+var ffi = require("ffi");
+
+var last = 0;
+
+assert(pcall(function() {
+  for( i=1,65536 ) {
+    last = i;
+    ffi.typeof("struct {}");
+  }
+}) == false);
+
+assert(last > 20000);

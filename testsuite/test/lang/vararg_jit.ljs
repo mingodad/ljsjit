@@ -1,0 +1,95 @@
+
+{ //- 1
+  var function f(a, b, c, ...) {
+    assert(c == null);
+    assert(a == 100-b);
+    return 100-a, 100-b;
+  }
+  for( i=1,100 ) {
+    var x, y = f(i, 100-i);
+    assert(x == 100-i);
+    assert(y == i);
+  }
+}
+
+{ //- 2
+  var function f(a, b, ...) {
+    if( a > b ) { return b; }
+    return a;
+  }
+  var x = 0;
+  for( i=1,200 ) {
+    x +=   f(i, 100, 99, 88, 77);
+  }
+  assert(x == 15050);
+}
+
+{ //- 3
+  var function f(a, b, ...) {
+    var c, d = ...;
+    if( c > d ) { return d; }
+    return c;
+  }
+  var x = 0;
+  for( i=1,200 ) {
+    x +=   f(77, 88, i, 100);
+  }
+  assert(x == 15050);
+}
+
+{ //- 4
+  var function f(a, b, ...) {
+    if( a > b ) { }
+    return ...;
+  }
+  var x = 0;
+  for( i=1,200 ) {
+    x +=   f(i, 100, i, 100);
+    assert(f(i, 100) == null);
+    assert(f(i, 100, 2) == 2);
+  }
+  assert(x == 20100);
+}
+
+{ //- 5
+  var function f(a, ...) {
+    var x, y = 0, 0;
+    for( i=1,100 ) {
+      var b, c = ...;
+      x +=   b;
+      y +=   c;
+    }
+    assert(x == 200 && y == 300);
+  }
+  f(1, 2, 3);
+}
+
+{ //- 6
+  var function f(a, ...) {
+    var t = {[0]=9, 9};
+    var v, w, x, y = 0, 0, 0, 0;
+    for( i=1,100 ) {
+      v, w = ...;
+      t[0] = 9; t[1] = 9;
+      x, y = ...;
+    }
+    assert(v == 2 && w == 3 && x == 2 && y == 3);
+  }
+  f(1, 2, 3);
+}
+
+{ //- 7
+  var function f(a, b, ...) {
+    for( i=1,100 ) {
+      var c, d = ...;
+      assert(a == c);
+      assert(b == d);
+    }
+  }
+  f(2, 3, 2, 3);
+  f(2, null, 2);
+  f(null, null);
+  f(null);
+  f();
+}
+

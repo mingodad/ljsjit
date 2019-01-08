@@ -1,0 +1,33 @@
+
+var bit = require("bit");
+var bor, band = bit.bor, bit.band;
+var shl, shr, rol = bit.lshift, bit.rshift, bit.rol;
+var write, char, unpack = io.write, string.char, unpack;
+var N = tonumber(arg && arg[1]) || 100;
+var M, buf = 2/N, {};
+write("P4\n", N, " ", N, "\n");
+for( y=0,N-1 ) {
+  var Ci, b, p = y*M-1, -16777216, 0;
+  var Ciq = Ci*Ci;
+  for( x=0,N-1,2 ) {
+    var Cr, Cr2 = x*M-1.5, (x+1)*M-1.5;
+    var Zr, Zi, Zrq, Ziq = Cr, Ci, Cr*Cr, Ciq;
+    var Zr2, Zi2, Zrq2, Ziq2 = Cr2, Ci, Cr2*Cr2, Ciq;
+    b = rol(b, 2);
+    for( i=1,49 ) {
+      Zi = Zr*Zi*2 + Ci; Zi2 = Zr2*Zi2*2 + Ci;
+      Zr = Zrq-Ziq + Cr; Zr2 = Zrq2-Ziq2 + Cr2;
+      Ziq = Zi*Zi; Ziq2 = Zi2*Zi2;
+      Zrq = Zr*Zr; Zrq2 = Zr2*Zr2;
+      if( band(b, 2) != 0 && Zrq+Ziq > 4.0 ) { b = band(b, -3); }
+      if( band(b, 1) != 0 && Zrq2+Ziq2 > 4.0 ) { b = band(b, -2); }
+      if( band(b, 3) == 0 ) { break; }
+    }
+    if( b >= 0 ) { ++p    ; buf[p] = b; b = -16777216; }
+  }
+  if( b != -16777216 ) {
+    if( band(N, 1) != 0 ) { b = shr(b, 1); }
+    ++p    ; buf[p] = shl(b, 8-band(N, 7));
+  }
+  write(char(unpack(buf, 1, p)));
+}

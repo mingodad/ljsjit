@@ -1,0 +1,6 @@
+
+var sum = 0;
+for( line in io.lines() ) {
+  sum +=   line;
+}
+io.write(sum, "\n");

@@ -1,0 +1,68 @@
+var rep = string.rep;
+
+{ //- smoke
+  assert(("p")->rep(0) == "");
+  assert(("a")->rep(3) == "aaa");
+  assert(("x\0z")->rep(4) == "x\0zx\0zx\0zx\0z");
+}
+
+{ //- versus concat
+  var s = "";
+  for( i = 1, 75 ) {
+    s = s .. "{}";
+    assert(s == ("{}")->rep(i));
+  }
+}
+
+{ //- misc
+  var y;
+  for( i=1,100 ) { y = rep("a", 10); }
+  assert(y == "aaaaaaaaaa");
+  for( i=1,100 ) { y = rep("ab", 10); }
+  assert(y == "abababababababababab");
+  var x = "a";
+  for( i=1,100 ) { y = rep(x, 10); }
+  assert(y == "aaaaaaaaaa");
+  var n = 10;
+  for( i=1,100 ) { y = rep(x, n); }
+  assert(y == "aaaaaaaaaa");
+  x = "ab";
+  for( i=1,100 ) { y = rep(x, n); }
+  assert(y == "abababababababababab");
+  x = 12;
+  n = "10";
+  for( i=1,100 ) { y = rep(x, n); }
+  assert(y == "12121212121212121212");
+}
+
+{ //- separator +goto
+  var y;
+  for( i=1,100 ) { y = rep("ab", 10, "c"); }
+  assert(y == "abcabcabcabcabcabcabcabcabcab");
+}
+
+{ //- iterate to table
+  var t = {};
+  for( i=1,100 ) { t[i] = rep("ab", i-85); }
+  assert(t[100] == "ababababababababababababababab");
+}
+
+{ //- iterate to table with sep +goto
+  var t = {};
+  for( i=1,100 ) { t[i] = rep("ab", i-85, "c"); }
+  assert(t[85] == "");
+  assert(t[86] == "ab");
+  assert(t[87] == "abcab");
+  assert(t[100] == "abcabcabcabcabcabcabcabcabcabcabcabcabcabcab");
+}
+
+{ //- iterate and concat
+  var y, z;
+  var x = "ab";
+  for( i=1,100 ) {
+    y = rep(x, i-90);
+    z = y.."fgh";
+  }
+  assert(y == "abababababababababab");
+  assert(z == "ababababababababababfgh");
+}

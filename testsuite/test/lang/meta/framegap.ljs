@@ -1,0 +1,24 @@
+{ //- untitled
+  var t = setmetatable({}, { __add = function(a, b) {
+    if( b > 200 ) {
+      for( j=1,10 ) { }
+      return b+3;
+    } else if( b > 100 ) {
+      return b+2;
+    } else {
+      return b+1;
+    }
+  } });
+
+  var function f(t, i) {
+    { return t+i; }
+    // Force large frame with unassigned slots below mm.
+    { var a,b,c,d,e,f,g,h,ix,j,k; }
+  }
+
+  var x = 0;
+  for( i=1,300 ) {
+    x = f(t, i);
+  }
+  assert(x == 303);
+}

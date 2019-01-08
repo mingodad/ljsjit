@@ -1,0 +1,104 @@
+{ //- coverage
+  var lt, le = false, false;
+  var t, u = {}, {};
+  var x, ax, bx;
+  var function ck(xx, a, b) {
+    if( x != xx ) { error("bad x", 2); }
+    if( ax != a ) { error("bad ax", 2); }
+    if( bx != b ) { error("bad bx", 2); }
+  }
+  var mt = {
+    __lt = function(a, b) { ax=a; bx=b; return lt; },
+    __le = function(a, b) { ax=a; bx=b; return le; },
+  };
+  t = setmetatable(t, mt);
+  u = setmetatable(u, mt);
+  lt, le = false, false;
+  x = 0; for( i=1,100 ) { x = t < u && 2 || 1; }        ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = t <= u && 2 || 1; }       ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = t > u && 2 || 1; }        ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = t >= u && 2 || 1; }       ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t < u) && 2 || 1; }  ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t <= u) && 2 || 1; } ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t > u) && 2 || 1; }  ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t >= u) && 2 || 1; } ck(2, u, t);
+  lt, le = false, true;
+  x = 0; for( i=1,100 ) { x = t < u && 2 || 1; }        ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = t <= u && 2 || 1; }       ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = t > u && 2 || 1; }        ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = t >= u && 2 || 1; }       ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t < u) && 2 || 1; }  ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t <= u) && 2 || 1; } ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t > u) && 2 || 1; }  ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t >= u) && 2 || 1; } ck(1, u, t);
+  lt, le = true, false;
+  x = 0; for( i=1,100 ) { x = t < u && 2 || 1; }        ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = t <= u && 2 || 1; }       ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = t > u && 2 || 1; }        ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = t >= u && 2 || 1; }       ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t < u) && 2 || 1; }  ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t <= u) && 2 || 1; } ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t > u) && 2 || 1; }  ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t >= u) && 2 || 1; } ck(2, u, t);
+  lt, le = true, true;
+  x = 0; for( i=1,100 ) { x = t < u && 2 || 1; }        ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = t <= u && 2 || 1; }       ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = t > u && 2 || 1; }        ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = t >= u && 2 || 1; }       ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t < u) && 2 || 1; }  ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t <= u) && 2 || 1; } ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t > u) && 2 || 1; }  ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t >= u) && 2 || 1; } ck(1, u, t);
+  mt.__le = null;
+  lt = false;
+  x = 0; for( i=1,100 ) { x = t < u && 2 || 1; }        ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = t <= u && 2 || 1; }       ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = t > u && 2 || 1; }        ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = t >= u && 2 || 1; }       ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t < u) && 2 || 1; }  ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t <= u) && 2 || 1; } ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t > u) && 2 || 1; }  ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t >= u) && 2 || 1; } ck(1, t, u);
+  lt = true;
+  x = 0; for( i=1,100 ) { x = t < u && 2 || 1; }        ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = t <= u && 2 || 1; }       ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = t > u && 2 || 1; }        ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = t >= u && 2 || 1; }       ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t < u) && 2 || 1; }  ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t <= u) && 2 || 1; } ck(2, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t > u) && 2 || 1; }  ck(1, u, t);
+  x = 0; for( i=1,100 ) { x = ! (t >= u) && 2 || 1; } ck(2, t, u);
+}
+
+{ //- Mixed metamethods for ordered comparisons.
+  var mt1 = { __lt = function(a, b) { return a[1] < b[1]; } };
+  var mt2 = { __lt = function(a, b) { return a[1] < b[1]; } };
+  var t1 = setmetatable({1}, mt1);
+  var t2 = setmetatable({2}, mt2);
+  {
+    var x;
+    for( i=1,100 ) { x = t1 <= t1; }
+    assert(x == true);
+  }
+  var ok, ret = pcall(function() {
+    var x;
+    for( i=1,100 ) { x = t1 < t2; }
+    return x;
+  });
+  if( table.pack ) {
+    assert(ok && ret == true);
+  } else {
+    assert(! ok);
+  }
+  ok, ret = pcall(function() {
+    var x;
+    for( i=1,100 ) { x = t1 <= t2; }
+    return x;
+  });
+  if( table.pack ) {
+    assert(ok && ret == true);
+  } else {
+    assert(! ok);
+  }
+}
+

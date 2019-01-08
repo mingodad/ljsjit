@@ -1,0 +1,45 @@
+var ffi = require("ffi");
+
+{ //- escaping global !private_G
+  var x = 0ll;
+  for( i=1,100 ) { ++x; g=x; }
+  assert(x == 100ll);
+  assert(g == 100ll);
+}
+
+{ //- preincrement escaping global !private_G
+  var x = 0ll;
+  for( i=1,100 ) { var y=x; ++x; g=y; }
+  assert(x == 100ll);
+  assert(g == 99ll);
+}
+
+{ //- escaping global and local !private_G
+  var x = 0ll;
+  var z;
+  for( i=1,100 ) { z=x+1; g=z; }
+  assert(z == 1ll);
+  assert(g == 1ll);
+}
+
+{ //- swapping
+  var x,y = 0ll, 0ll;
+  for( i=1,100 ) { y,x=x,x+1; }
+  assert(x == 100ll);
+  assert(y == 99ll);
+}
+
+{ //- pointer to self
+  var st = ffi.typeof("struct { void *p; }");
+  var x;
+  for( i=1,100 ) { x = st(); x.p = x; }
+  assert(x.p == ffi.cast("void *", x));
+}
+
+{ //- strchr
+  ffi.cdef([=[char *strchr(char *, int);]=]);
+  for( i=1,100 ) {
+    var p = ffi.new("char[2]");
+    ffi.C.strchr(p, 32);
+  }
+}

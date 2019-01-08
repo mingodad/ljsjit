@@ -1,0 +1,79 @@
+{ //- global assignments !private_G
+  g = 0;
+  gf = 1;
+  gz = 2;
+
+  var function f(i) {
+    if( i == 90 ) {
+      ++gf    ;
+      return true;
+    }
+    ++g    ;
+  }
+
+  var function z(i) {
+    if( f(i) ) {
+      ++gz    ;
+    }
+  }
+
+  for( j=1,5 ) {
+    for( i=1,100 ) { z(i); }
+  }
+
+  assert(g == 495);
+  assert(gf == 6);
+  assert(gz == 7);
+}
+
+{ //- mutual recursion
+  var f, g;
+  function f(j) {
+    if( j >= 0 ) { return g(j-1); }
+  }
+  function g(j) {
+    for( i=1,200 ) {
+      if( i > 100 ) { return f(j); }
+    }
+  }
+  for( k=1,20 ) { g(20); }
+}
+
+{ //- multi-path mutual recursion
+  var f, g;
+  function f(j, k) {
+    if( j >= 0 ) { return g(j-1, k); }
+    if( k >= 0 ) { return g(20, k-1); }
+  }
+  function g(j, k) {
+    for( i=1,200 ) {
+      if( i > 100 ) { return f(j, k); }
+    }
+  }
+  g(20, 20);
+}
+
+{ //- late mutual recursion
+  var k = 0;
+  var f, g;
+
+  function g(a) {
+    // 'a' is an SLOAD #1 from f's frame and still at slot #1
+    // Avoid losing a in exit if the SLOAD is ignored
+    if( k > 10 ) { k = 0; }
+    ++k   ;
+    return f(a);
+  }
+
+  function f(a,b,c,d,e) {
+    if( ! e ) { e =1; }
+    ++a;
+    if( a > 1000 ) { return; }
+    for( i=1,100 ) {
+      ++e;
+      if( i > 90 ) { return g(a); }
+    }
+  }
+
+  f(1,2,3,4,5);
+}

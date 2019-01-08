@@ -1,0 +1,25 @@
+
+// Must preserve the modified function slot in the RET snapshot.
+var function a() {
+  var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+  var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+  var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+  return 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+}
+
+var function b() {
+  return a();
+}
+
+var function c() {
+  for( j=1,10 ) {
+    for( i=1,50 ) { b(); b(); b(); }
+    collectgarbage();
+    var t = {};
+    for( i=1,50 ) { t = {t}; }
+  }
+}
+
+jit.off(c);
+c();
+

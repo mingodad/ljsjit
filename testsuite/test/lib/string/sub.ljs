@@ -1,0 +1,189 @@
+var band, bor = bit && bit.band, bit && bit.bor;
+var sub = string.sub;
+var expect_error = require("common.expect_error");
+
+{ //- smoke
+  assert(sub("abc", 2) == "bc");
+  assert(sub(123, "2") == "23");
+}
+
+{ //- argcheck
+  expect_error(function() { sub("abc", false); },
+      "bad argument #2 to 'sub' (number expected, got boolean)");
+  expect_error(function() { ("abc")->sub(false); },
+      "bad argument #1 to 'sub' (number expected, got boolean)");
+}
+
+{ //- all bar substrings
+  var subs = {
+    {"b", "ba", "bar"},
+    { "",  "a",  "ar"},
+    { "",   "",   "r"}
+  };
+  for( i = 1, 3 ) {
+    for( j = 1, 3 ) {
+      assert(sub("bar", i, j) == subs[i][j]);
+      assert(sub("bar", -4+i, j) == subs[i][j]);
+      assert(sub("bar", i, -4+j) == subs[i][j]);
+      assert(sub("bar", -4+i, -4+j) == subs[i][j]);
+    }
+  }
+}
+
+{ //- Positive slice [i,len] or overflow +bit
+  var s = "abc";
+  var x;
+  for( j=100,107 ) {
+    for( i=1,j ) { x = sub("abc", band(i, 7)); }
+    assert(x == sub("abc", band(j, 7)));
+  }
+  for( j=100,107 ) {
+    for( i=1,j ) { x = sub(s, band(i, 7)); }
+    assert(x == sub(s, band(j, 7)));
+  }
+}
+
+{ //- Negative slice [-i,len] or underflow +bit
+  var s = "abc";
+  var x;
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x = sub("abc", bor(i, -8)); }
+    assert(x == sub("abc", bor(j, -8)));
+  }
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x = sub(s, bor(i, -8)); }
+    assert(x == sub(s, bor(j, -8)));
+  }
+}
+
+{ //- Positive slice [1,i] or overflow +bit
+  var s = "abc";
+  var x;
+  for( j=100,107 ) {
+    for( i=1,j ) { x = sub("abc", 1, band(i, 7)); }
+    assert(x == sub("abc", 1, band(j, 7)));
+  }
+  for( j=100,107 ) {
+    for( i=1,j ) { x = sub(s, 1, band(i, 7)); }
+    assert(x == sub(s, 1, band(j, 7)));
+  }
+}
+
+{ //- Negative slice [1,-i] or underflow +bit
+  var s = "abc";
+  var x;
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x = sub("abc", 1, bor(i, -8)); }
+    assert(x == sub("abc", 1, bor(j, -8)));
+  }
+  for( j=-100,-107,-1 ) {
+    for( i=-1,j,-1 ) { x = sub(s, 1, bor(i, -8)); }
+    assert(x == sub(s, 1, bor(j, -8)));
+  }
+}
+
+{ //- jit sub 1 eq
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 1) == "a" ) { ++x    ; }
+  }
+  assert(x == 100);
+}
+
+{ //- jit sub 1 ne (contents)
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 1) == "b" ) { ++x    ; }
+  }
+  assert(x == 0);
+}
+
+{ //- jit sub 1 ne (rhs too long)
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 1) == "ab" ) { ++x    ; }
+  }
+  assert(x == 0);
+}
+
+{ //- jit sub 1,2 ne
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 2) == "a" ) { ++x    ; }
+  }
+  assert(x == 0);
+}
+
+{ //- jit sub 1,k eq
+  var s = "abcde";
+  var x = 0;
+  var k = 1;
+  for( i=1,100 ) {
+    if( sub(s, 1, k) == "a" ) { ++x    ; }
+  }
+  assert(x == 100);
+}
+
+{ //- jit sub 1,k ne (contents)
+  var s = "abcde";
+  var x = 0;
+  var k = 1;
+  for( i=1,100 ) {
+    if( sub(s, 1, k) == "b" ) { ++x    ; }
+  }
+  assert(x == 0);
+}
+
+{ //- jit sub 1,k ne (rhs too long)
+  var s = "abcde";
+  var x = 0;
+  var k = 1;
+  for( i=1,100 ) {
+    if( sub(s, 1, k) == "ab" ) { ++x    ; }
+  }
+  assert(x == 0);
+}
+
+{ //- jit sub 1,2 eq
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 2) == "ab" ) { ++x    ; }
+  }
+  assert(x == 100);
+}
+
+{ //- jit sub 1,3 eq
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 3) == "abc" ) { ++x    ; }
+  }
+  assert(x == 100);
+}
+
+{ //- jit sub 1,4 eq
+  var s = "abcde";
+  var x = 0;
+  for( i=1,100 ) {
+    if( sub(s, 1, 4) == "abcd" ) { ++x    ; }
+  }
+  assert(x == 100);
+}
+
+{ //- jit sub i,i
+  var t = {};
+  var line = string.rep("..XX", 100);
+  var i = 1;
+  var c = line->sub(i, i);
+  while( c != "" && c != "Z" ) {
+    t[i] = c == "X" && "Y" || c;
+    ++i    ;
+    c = line->sub(i, i);
+  }
+  assert(table.concat(t) == string.rep("..YY", 100));
+}

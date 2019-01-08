@@ -1,0 +1,21 @@
+
+{ //- untitled
+  var keys = {};
+  for( i=1,100 ) { keys[i] = "foo"; }
+  keys[95] = "__index";
+  var function fidx(t, k) { return 12345; }
+  var mt = { foo = 1, __index = "" };
+  var t = setmetatable({ 1 }, mt);
+  t[1] = null;
+  mt.__index = null;
+  var x = null;
+  for( i=1,100 ) {
+    mt[keys[i]] = fidx;
+    if( t[1] ) {
+      if( ! x ) { x = i; }
+      assert(t[1] == 12345);
+    }
+  }
+  assert(x == 95);
+}
+

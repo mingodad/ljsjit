@@ -1,0 +1,12 @@
+bit64.ljs +luajit>=2.1
+cdata_var.ljs
+copy_fill.ljs
+err.ljs
+istype.ljs
+jit_array.ljs
+jit_complex.ljs
+jit_misc.ljs
+jit_struct.ljs
+meta_tostring.ljs
+redir.ljs
+type_punning.ljs

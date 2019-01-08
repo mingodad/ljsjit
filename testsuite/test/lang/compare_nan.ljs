@@ -1,0 +1,99 @@
+
+var function check(a, b) {
+  if( a != b ) {
+    error("check failed with "..tostring(a).." ~= "..tostring(b), 2);
+  }
+}
+
+var nan, one = 0/0, 1;
+
+{ //- nan nan
+  check(nan<nan,	false);
+  check(nan<=nan,	false);
+  check(nan>nan,	false);
+  check(nan>=nan,	false);
+  check(nan==nan,	false);
+  check(nan!=nan,	true);
+}
+
+{ //- nan one
+  check(nan<one,	false);
+  check(nan<=one,	false);
+  check(nan>one,	false);
+  check(nan>=one,	false);
+  check(nan==one,	false);
+  check(nan!=one,	true);
+}
+
+{ //- one nan
+  check(one<nan,	false);
+  check(one<=nan,	false);
+  check(one>nan,	false);
+  check(one>=nan,	false);
+  check(one==nan,	false);
+  check(one!=nan,	true);
+}
+
+{ //- nan 1
+  check(nan<1,	false);
+  check(nan<=1,	false);
+  check(nan>1,	false);
+  check(nan>=1,	false);
+  check(nan==1,	false);
+  check(nan!=1,	true);
+}
+
+{ //- 1 nan
+  check(1<nan,	false);
+  check(1<=nan,	false);
+  check(1>nan,	false);
+  check(1>=nan,	false);
+  check(1==nan,	false);
+  check(1!=nan,	true);
+}
+
+{ //- not nan nan
+  check(! (nan<nan),	true);
+  check(! (nan<=nan),	true);
+  check(! (nan>nan),	true);
+  check(! (nan>=nan),	true);
+  check(! (nan==nan),	true);
+  check(! (nan!=nan),	false);
+}
+
+{ //- not nan one
+  check(! (nan<one),	true);
+  check(! (nan<=one),	true);
+  check(! (nan>one),	true);
+  check(! (nan>=one),	true);
+  check(! (nan==one),	true);
+  check(! (nan!=one),	false);
+}
+
+{ //- not one nan
+  check(! (one<nan),	true);
+  check(! (one<=nan),	true);
+  check(! (one>nan),	true);
+  check(! (one>=nan),	true);
+  check(! (one==nan),	true);
+  check(! (one!=nan),	false);
+}
+
+{ //- not nan 1
+  check(! (nan<1),	true);
+  check(! (nan<=1),	true);
+  check(! (nan>1),	true);
+  check(! (nan>=1),	true);
+  check(! (nan==1),	true);
+  check(! (nan!=1),	false);
+}
+
+{ //- not 1 nan
+  check(! (1<nan),	true);
+  check(! (1<=nan),	true);
+  check(! (1>nan),	true);
+  check(! (1>=nan),	true);
+  check(! (1==nan),	true);
+  check(! (1!=nan),	false);
+}
+

@@ -1,0 +1,23 @@
+
+{ //- length increasing and decreasing in loop
+  var t = {};
+  for( i=1,100 ) { t[#t+1] = i; }
+  assert(#t == 100);
+  for( i=1,100 ) { t[#t] = null; }
+  assert(#t == 0);
+}
+
+{ //- length increasing in loop with existing element
+  var t = {};
+  t[90] = 999;
+  for( i=1,100 ) { t[#t+1] = i; }
+  assert(#t > 100 && t[#t] == 100);
+}
+
+{ //- length decreasing in loop with erased element
+  var t = {};
+  for( i=1,100 ) { t[i] = i; }
+  t[10] = null;
+  for( i=1,99 ) { t[#t] = null; }
+  assert(#t == 0);
+}

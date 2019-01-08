@@ -1,0 +1,35 @@
+
+{ //- coverage
+  var eq = false;
+  var t, u = {}, {};
+  var x, ax, bx;
+  var function ck(xx, a, b) {
+    if( x != xx ) { error("bad x", 2); }
+    if( ax != a ) { error("bad ax", 2); }
+    if( bx != b ) { error("bad bx", 2); }
+  }
+  var mt = {
+    __eq = function(a, b) { ax=a; bx=b; return eq; },
+  };
+  t = setmetatable(t, mt);
+  u = setmetatable(u, mt);
+  eq = false;
+  x = 0; for( i=1,100 ) { x = t == u && 2 || 1; }       ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = t != u && 2 || 1; }       ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t == u) && 2 || 1; } ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t != u) && 2 || 1; } ck(1, t, u);
+  eq = true;
+  x = 0; for( i=1,100 ) { x = t == u && 2 || 1; }       ck(2, t, u);
+  x = 0; for( i=1,100 ) { x = t != u && 2 || 1; }       ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t == u) && 2 || 1; } ck(1, t, u);
+  x = 0; for( i=1,100 ) { x = ! (t != u) && 2 || 1; } ck(2, t, u);
+}
+
+{ //- non-constant objects +bit
+  var bit = require("bit");
+  var mt = { __eq = function(a, b) { return true; } };
+  var tt = { [0] = setmetatable({}, mt), setmetatable({}, mt) };
+  for( i=0,100 ) {
+    assert(tt[0] == tt[bit.band(i, 1)]);
+  }
+}

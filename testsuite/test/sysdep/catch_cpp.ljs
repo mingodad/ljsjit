@@ -1,0 +1,71 @@
+
+var cp = require("cpptest");
+
+{
+  var a, b = pcall(cp.catch, function() { return "x"; });
+  assert(a == true && b == "x");
+}
+
+{
+  var a, b = pcall(function() { cp.throw("foo"); });
+  assert(a == false && b == "C++ exception");
+}
+
+var unwind;
+{
+  var a, b = pcall(cp.catch, function() { cp.throw("foo"); });
+  unwind = a;
+  assert((a == false && b == "C++ exception") || (a == true && b == "foo"));
+}
+
+{
+  var st = cp.alloc(function() { return cp.isalloc(); });
+  assert(st == true);
+  assert(cp.isalloc() == false);
+}
+
+{
+  var a, b = pcall(cp.alloc, function() {
+    assert(cp.isalloc() == true);
+    return "foo", cp.throw;
+  });
+  assert(a == false && b == "C++ exception");
+  assert(cp.isalloc() == false);
+}
+
+if( unwind ) {
+  var a, b = pcall(cp.alloc, function() {
+    assert(cp.isalloc() == true);
+    return "foo", error;
+  });
+  assert(a == false && b == "foo");
+  assert(cp.isalloc() == false);
+}
+
+{
+  var a,b,c,d,e,f = cp.usereg(100, 50, function() { }, false);
+  assert(a==164 && b==312 && c==428 && d==3696 && e==404 && f==404);
+}
+
+{
+  var function test() {
+    cp.usereg(100, 40, error, "foo");
+  }
+  var a,b,c,d,e,f = cp.usereg(100, 51, test, false);
+  assert(a==164 && b==312 && c==428 && d==3696 && e==404 && f==404);
+}
+
+{
+  var t = {};
+  t.t = t;
+  var function foo() {
+    for( i=1,100 ) {
+      var a,b,c,d,e,f = t, t.t, t.t.t, t.t.t.t, t.t.t.t.t, t.t.t.t.t.t;
+      var g,h,j,k,l = f.t, f.t.t, f.t.t.t, f.t.t.t.t, f.t.t.t.t.t;
+      var m = { a,b,c,d,e,f,g,h,j,k,l };
+    }
+  }
+  var a,b,c,d,e,f = cp.usereg(100, 50, foo, false);
+  assert(a==164 && b==312 && c==428 && d==3696 && e==404 && f==404);
+}
+

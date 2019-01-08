@@ -1,0 +1,35 @@
+var ffi = require("ffi");
+
+{ //- error in FFI metamethod: don't print metamethod frame.
+  var ok, err = xpcall(function() {
+    var x = (1ll).foo;
+  }, debug.traceback);
+  assert(ok == false);
+  assert(! string.find(err, "__index"));
+}
+
+{ //- tailcall in regular metamethod: keep metamethod frame.
+  var ok, err = xpcall(function() {
+    var t = setmetatable({}, {__index = function() { return rawget("x"); } });
+    var y = t[1];
+  }, debug.traceback);
+  assert(ok == false);
+  assert(string.find(err, "__index"));
+}
+
+{ //- error in FFI metamethod: set correct PC.
+  ffi.cdef([=[
+typedef struct { int x; int y; } ffi_err_point;
+ffi_err_point ffi_err_strchr(ffi_err_point* op1, ffi_err_point* op2) asm("strchr");
+]=]);
+  var point = ffi.metatype("ffi_err_point", { __add = ffi.C.ffi_err_strchr });
+  var function foo() {
+    var p = point({ 3, 4 });
+    var r = p + p;
+    r = p + 5;
+  }
+  var ok, err = xpcall(foo, debug.traceback);
+  var line = debug.getinfo(foo).linedefined+3;
+  assert(string.match(err, "traceback:[^:]*:"..line..":"));
+}
+

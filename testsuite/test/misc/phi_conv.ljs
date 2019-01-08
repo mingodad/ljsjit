@@ -1,0 +1,53 @@
+
+var bit = require("bit");
+
+var Rm = {};
+for( i=0,16 ) { Rm[i] = 0; }
+
+for( k=1,10 ) {
+  var seed = 1;
+  for( i=16,0,-1 ) {
+    seed = bit.band(seed*9069, 0x7fffffff);
+    Rm[i] = seed;
+  }
+  assert(seed == 1952688301);
+}
+
+var retindex = 0;
+var retdata = { 3, 1, 1, 1, 0, 3, 1, 0, 0, 2, 0, 2, 0, 0, 3, 1, 1, 1, 1 };
+
+var function get_bits() {
+  ++retindex    ;
+  return retdata[retindex];
+}
+
+var hufcodes = { [0] = true, [4] = true, [11] = true, [36] = true, [68] = true };
+
+var maskhuf = { 0x0002, 0x0003, 0x0004, 0x0005, };
+
+var function decodeCode() {
+  var lookup = get_bits();
+  var code = hufcodes[lookup];
+  var z = {1,1,1,1};
+  if( ! code ) {
+    for( i = 1, 4 ) {
+      lookup = bit.bor(lookup, bit.lshift(get_bits(), i + 1));
+      // need PHI for CONV num.int of lookup, used in snapshot
+      code = hufcodes[lookup + maskhuf[i]];
+      if( code ) { break; }
+    }
+  }
+  assert(code);
+  return code;
+}
+
+var function test() {
+  for( i = 1, 6 ) {
+    decodeCode();
+  }
+}
+
+if( jit && jit.status && jit.status() ) { jit.opt.start("hotloop=1"); }
+
+test();
+

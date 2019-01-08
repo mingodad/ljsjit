@@ -1,0 +1,16 @@
+
+{ //- float
+  var t = { "var x\n" };
+  for( i=2,65537 ) { t[i] = "x="..i..".5\n"; }
+  assert(loadstring(table.concat(t)) != null);
+  t[65538] = "x=65538.5";
+  assert(loadstring(table.concat(t)) == null);
+}
+
+{ //- int
+  var t = { "var x\n" };
+  for( i=2,65537 ) { t[i] = "x='"..i.."'\n"; }
+  assert(loadstring(table.concat(t)) != null);
+  t[65538] = "x='65538'";
+  assert(loadstring(table.concat(t)) == null);
+}

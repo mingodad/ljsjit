@@ -1,0 +1,73 @@
+
+{ //- nometatable
+  var t = {};
+  for( i=1,10 ) { t[i] = i+100; }
+  var a, b = 0, 0;
+  for( j=1,100 ) { for( k,v in ipairs(t) ) { a +=   k; b +=   v; } }
+  assert(a == 5500);
+  assert(b == 105500);
+  a, b = 0, 0;
+  for( j=1,100 ) { for( k,v in pairs(t) ) { a +=   k; b +=   v; } }
+  assert(a == 5500);
+  assert(b == 105500);
+}
+
+{ //- empty metatable
+  var t = setmetatable({}, {});
+  for( i=1,10 ) { t[i] = i+100; }
+  var a, b = 0, 0;
+  for( j=1,100 ) { for( k,v in ipairs(t) ) { a +=   k; b +=   v; } }
+  assert(a == 5500);
+  assert(b == 105500);
+  a, b = 0, 0;
+  for( j=1,100 ) { for( k,v in pairs(t) ) { a +=   k; b +=   v; } }
+  assert(a == 5500);
+  assert(b == 105500);
+}
+
+{ //- metamethods +compat5.2
+  var function iter(t, i) {
+    ++i    ;
+    if( t[i] ) { return i, t[i]+2; }
+  }
+  var function itergen(t) {
+    return iter, t, 0;
+  }
+  var t = setmetatable({}, { __pairs = itergen, __ipairs = itergen });
+  for( i=1,10 ) { t[i] = i+100; }
+  var a, b = 0, 0;
+  for( j=1,100 ) { for( k,v in ipairs(t) ) { a +=   k; b +=   v; } }
+  assert(a == 5500);
+  assert(b == 107500);
+  a, b = 0, 0;
+  for( j=1,100 ) { for( k,v in pairs(t) ) { a +=   k; b +=   v; } }
+  assert(a == 5500);
+  assert(b == 107500);
+}
+
+{ //- _G
+  var n = 0;
+  for( k,v in pairs(_G) ) {
+    assert(_G[k] == v);
+    ++n    ;
+  }
+  assert(n >= 35);
+}
+
+{ //- count
+  var function count(t) {
+    var n = 0;
+    for( i,v in pairs(t) ) {
+      ++n    ;
+    }
+    return n;
+  }
+  assert(count({ 4,5,6,null,8,null,10}) == 5);
+  assert(count({ [0] = 3, 4,5,6,null,8,null,10}) == 6);
+  assert(count({ foo=1, bar=2, baz=3 }) == 3);
+  assert(count({ foo=1, bar=2, baz=3, boo=4 }) == 4);
+  assert(count({ 4,5,6,null,8,null,10, foo=1, bar=2, baz=3 }) == 8);
+  var t = { foo=1, bar=2, baz=3, boo=4 };
+  t.bar = null; t.boo = null;
+  assert(count(t) == 2);
+}

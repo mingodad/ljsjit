@@ -1,0 +1,112 @@
+{ //- Constant folding
+  var y;
+  for( i=1,100 ) { y = "a".."b"; }
+  assert(y == "ab");
+  for( i=1,100 ) { y = "ab"..(1).."cd"..(1.5); }
+  assert(y == "ab1cd1.5");
+}
+
+{ //- Fuse conversions to strings
+  var y;
+  var x = "a";
+  for( i=1,100 ) { y = x..i; }
+  assert(y == "a100");
+  x = "a";
+  for( i=1.5,100.5 ) { y = x..i; }
+  assert(y == "a100.5");
+}
+
+{ //- Fuse string construction
+  var y;
+  var x = "abc";
+  for( i=1,100 ) { y = "x"..string.sub(x, 2); }
+  assert(y == "xbc");
+}
+
+{ //- CSE, sink
+  var y;
+  var x = "a";
+  for( i=1,100 ) { y = x.."b"; }
+  assert(y == "ab");
+}
+
+{ //- CSE, two buffers in parallel, no sink
+  var y, z;
+  var x1, x2 = "xx", "yy";
+  for( i=1,100 ) { y = x1.."a"..x1; z = x1.."a"..x2; }
+  assert(y == "xxaxx");
+  assert(z == "xxayy");
+  x1 = "xx";
+  for( i=1,100 ) { y = x1.."a"..x1; z = x1.."b"..x1; }
+  assert(y == "xxaxx");
+  assert(z == "xxbxx");
+}
+
+{ //- Append, CSE
+  var y, z;
+  var x = "a";
+  for( i=1,100 ) {
+    y = x.."b";
+    y = y.."c";
+  }
+  assert(y == "abc");
+  x = "a";
+  for( i=1,100 ) {
+    y = x.."b";
+    z = y.."c";
+  }
+  assert(y == "ab");
+  assert(z == "abc");
+  x = "a";
+  for( i=1,100 ) {
+    y = x.."b";
+    z = y..i;
+  }
+  assert(y == "ab");
+  assert(z == "ab100");
+}
+
+{ //- Append, FOLD
+  var a, b = "x";
+  for( i=1,100 ) { b = (a.."y")..""; }
+  assert(b == "xy");
+}
+
+{ //- Append to buffer, sink
+  var x = "a";
+  for( i=1,100 ) { x = x.."b"; }
+  assert(x == "a"..string.rep("b", 100));
+  x = "a";
+  for( i=1,100 ) { x = x.."bc"; }
+  assert(x == "a"..string.rep("bc", 100));
+}
+
+{ //- Append to two buffers in parallel, no append, no sink
+  var y, z = "xx", "yy";
+  for( i=1,100 ) { y = y.."a"; z = z.."b"; }
+  assert(y == "xx"..string.rep("a", 100));
+  assert(z == "yy"..string.rep("b", 100));
+}
+
+{ //- Sink into side-exit
+  var x = "a";
+  var z;
+  for( i=1,200 ) {
+    var y = x.."b";
+    if( i > 100 ) {
+      z = y..i;
+    }
+  }
+  assert(z == "ab200");
+}
+
+{ //- Very long strings
+  for( i, s in ipairs({"a", "bc", "def"}) ) {
+    for( n = 1, 20 ) {
+      s = s .. s;
+    }
+    assert(#s == 2**20*i);
+    assert(s->sub(1, 6) == s->sub(7, 12));
+    assert(s->sub(1, 6) == s->sub(-6, -1));
+  }
+}

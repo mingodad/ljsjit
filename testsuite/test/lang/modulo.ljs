@@ -1,0 +1,46 @@
+var assert, floor = assert, math.floor;
+
+{ //- integer equivalence
+  for( x=-5,5 ) {
+    for( y=-5,5 ) {
+      if( y != 0 ) {
+        assert(x%y == x-floor(x/y)*y);
+      }
+    }
+  }
+}
+
+{ //- fractional equivalence
+  for( x=-5,5,0.25 ) {
+    for( y=-5,5,0.25 ) {
+      if( y != 0 ) {
+        assert(x%y == x-floor(x/y)*y);
+      }
+    }
+  }
+}
+
+{ //- jit constant RHS
+  var y = 0;
+  for( x=-100,123 ) {
+    y = y + x%17;
+  }
+  assert(y == 1777);
+}
+
+{ //- jit constant LHS, with exit
+  var y = 0;
+  for( x=-100,123 ) {
+    if( x != 0 ) {
+      y = y + 85%x;
+    }
+  }
+  assert(y == 2059);
+}
+
+{ //- divide by zero
+  var x = 1%0;
+  assert(x != x);
+  x = floor(0/0);
+  assert(x != x);
+}

@@ -1,0 +1,74 @@
+
+{ //- square sum
+  var function f(x) { return x*x; }
+  var x = 0;
+  for( i=1,100 ) {
+    var ok1, ok2, ok3, y = pcall(pcall, pcall, f, i);
+    if( ! ok1 || ! ok2 || ! ok3 ) { break; }
+    x +=   y;
+  }
+  assert(x == 338350);
+}
+
+{ //- sqrt square sum
+  var x = 0;
+  for( i=1,100 ) {
+    var ok1, ok2, ok3, y = pcall(pcall, pcall, math.sqrt, i*i);
+    if( ! ok1 || ! ok2 || ! ok3 ) { break; }
+    x +=   y;
+  }
+  assert(x == 5050);
+}
+
+{ //- sum with error
+  var function f(x) {
+    if( x >= 150 ) { error("test", 0); }
+    return x; }
+  var x = 0;
+  for( i=1,200 ) {
+    var ok1, ok2, ok3, y = pcall(pcall, pcall, f, i);
+    if( ! ok1 || ! ok2 || ! ok3 ) {
+      assert(ok1 && ok2 && ! ok3);
+      assert(y == "test");
+      break;
+    }
+    x +=   y;
+  }
+  assert(x == 11175);
+}
+
+{ //- sum or square
+  var function f(x) {
+    if( x >= 150 ) { return x*x; }
+    return x;
+  }
+  var x = 0;
+  for( i=1,200 ) {
+    var ok1, ok2, ok3, y = pcall(pcall, pcall, f, i);
+    if( ! ok1 || ! ok2 || ! ok3 ) { break; }
+    x +=   y;
+  }
+  assert(x == 1584100);
+}
+
+{ //- sum or square with error
+  var function f(x) {
+    if( x >= 150 ) {
+      if( x >= 175 ) { error("test", 0); }
+      return x*x;
+    }
+    return x;
+  }
+  var x = 0;
+  for( i=1,200 ) {
+    var ok1, ok2, ok3, y = pcall(pcall, pcall, f, i);
+    if( ! ok1 || ! ok2 || ! ok3 ) {
+      assert(ok1 && ok2 && ! ok3);
+      assert(y == "test");
+      // note: no break, so we get an exit to interpreter
+    } else {
+      x +=   y;
+    }
+  }
+  assert(x == 668575);
+}

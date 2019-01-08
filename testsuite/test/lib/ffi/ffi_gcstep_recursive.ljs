@@ -1,0 +1,66 @@
+// From Robert G. Jakabosky, 2012-03-20
+
+var N=tonumber(arg[1] || 10000);
+
+var ffi=require("ffi");
+
+ffi.cdef([=[
+struct Buffer { void *buf; };
+typedef struct Buffer Buffer;
+]=]);
+
+var Buffer_mt = { __index = {} };
+var Buffer = ffi.typeof("Buffer");
+
+// used to track alive objects
+var nobj_obj_flags = {};
+
+var function obj_to_id(ptr) {
+  return tonumber(ffi.cast('uintptr_t', ffi.cast('void *', ptr)));
+}
+
+function obj_type_Buffer_push(val) {
+  var obj = Buffer(val);
+  var id = obj_to_id(obj);
+  nobj_obj_flags[id] = true;
+  return obj;
+}
+
+var function Buffer_new(len) {
+  var buf = ffi.cast('void *', 0xdeadbeef);
+  return obj_type_Buffer_push(buf);
+}
+
+function obj_type_Buffer_delete(obj) {
+  var id = obj_to_id(obj);
+  if( ! nobj_obj_flags[id] ) { return null; }
+  nobj_obj_flags[id] = null;
+  return obj.buf;
+}
+
+var getmeta = debug.getmetatable;
+
+var function Buffer_close(this) {
+  var buf = obj_type_Buffer_delete(this);
+  getmeta("Buffer_close"); // cause trace to abort
+  if( buf ) {
+    this.buf = null;
+  }
+}
+Buffer_mt.__gc = Buffer_close;
+Buffer_mt.__index.close = Buffer_close;
+
+ffi.metatype(Buffer, Buffer_mt);
+
+var cdata = {};
+for( x=1,2 ) {
+  cdata = {};
+  for( i=1,N ) {
+    cdata[i] = Buffer_new(1);
+  }
+  for( i=1,N ) {
+    cdata[i]->close();
+  }
+  cdata = null;
+}
+

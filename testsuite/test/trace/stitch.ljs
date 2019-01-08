@@ -1,0 +1,19 @@
+{ //- octal
+  var tonumber = tonumber;
+  var function octal(s) { return tonumber(s, 8); }
+  for( i=1,100 ) {
+    octal("1");
+    octal("1");
+    octal("1");
+  }
+}
+
+{ //- coroutines
+  var t = {
+    [0] = function() { },
+    coroutine.wrap(function() { while( true ) { coroutine.yield(); } }),
+  };
+  for( i=1,100 ) {
+    t[i % 2]();
+  }
+}

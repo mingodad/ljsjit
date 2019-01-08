@@ -1,0 +1,69 @@
+{ //- table 1
+  var t=setmetatable({}, {__newindex=function(t,k,v) {
+    rawset(t, k, 100-v);
+  }});
+
+  for( i=1,100 ) { t[i] = i; }
+  for( i=1,100 ) { assert(t[i] == 100-i); }
+
+  for( i=1,100 ) { t[i] = i; }
+  for( i=1,100 ) { assert(t[i] == i); }
+
+  for( i=1,100 ) { t[i] = null; }
+  for( i=1,100 ) { t[i] = i; }
+  for( i=1,100 ) { assert(t[i] == 100-i); }
+}
+
+{ //- jit gaining href
+  var count = 0;
+  var t = setmetatable({ foo = null },
+    { __newindex=function() { ++count    ; } });
+  for( j=1,2 ) {
+    for( i=1,100 ) { t.foo = 1; }
+    rawset(t, "foo", 1);
+  }
+  assert(count == 100);
+}
+
+{ //- jit gaining aref
+  var count = 0;
+  var t = setmetatable({ null },
+    { __newindex=function() { ++count    ; } });
+  for( j=1,2 ) {
+    for( i=1,100 ) { t[1] = 1; }
+    rawset(t, 1, 1);
+  }
+  assert(count == 100);
+}
+
+{ //- resize
+  var grandparent = {};
+  grandparent.__newindex = function(s,_,_) { tostring(s); };
+
+  var parent = {};
+  parent.__newindex = parent;
+  parent.bar = 1;
+  setmetatable(parent, grandparent);
+
+  var child = setmetatable({}, parent);
+  child.foo = _;
+}
+
+{ //- str
+  var t=setmetatable({}, {__newindex=function(t,k,v) {
+    assert(v == "foo"..k);
+    rawset(t, k, "bar"..k);
+  }});
+
+  for( i=1,100 ) { t[i]="foo"..i; }
+  for( i=1,100 ) { assert(t[i] == "bar"..i); }
+
+  for( i=1,100 ) { t[i]="baz"..i; }
+  for( i=1,100 ) { assert(t[i] == "baz"..i); }
+
+  t=setmetatable({foo=1,bar=1,baz=1},{});
+  t.baz=null;
+  t.baz=2;
+  t.baz=null;
+  t.baz=2;
+}

@@ -1,0 +1,70 @@
+var getmetatable, setmetatable = getmetatable, setmetatable;
+
+{ //- 1. Store with same ref and same value. All stores in loop eliminated.
+  var mt = {};
+  var t = {};
+  for( i=1,100 ) {
+    setmetatable(t, mt);
+    assert(getmetatable(t) == mt);
+    setmetatable(t, mt);
+    assert(getmetatable(t) == mt);
+  }
+  assert(getmetatable(t) == mt);
+}
+
+{ //- 2. Store with different ref and same value. All stores in loop eliminated.
+  var mt = {};
+  var t1 = {};
+  var t2 = {};
+  for( i=1,100 ) {
+    setmetatable(t1, mt);
+    assert(getmetatable(t1) == mt);
+    setmetatable(t2, mt);
+    assert(getmetatable(t2) == mt);
+  }
+  assert(getmetatable(t1) == mt);
+  assert(getmetatable(t2) == mt);
+}
+
+{ //- 3. Store with different ref and different value. Cannot eliminate any stores.
+  var mt1 = {};
+  var mt2 = {};
+  var t1 = {};
+  var t2 = {};
+  for( i=1,100 ) {
+    setmetatable(t1, mt1);
+    assert(getmetatable(t1) == mt1);
+    setmetatable(t2, mt2);
+    assert(getmetatable(t2) == mt2);
+  }
+  assert(getmetatable(t1) == mt1);
+  assert(getmetatable(t2) == mt2);
+}
+
+{ //- 4. Store with same ref and different value. 2nd store remains in loop.
+  var mt1 = {};
+  var mt2 = {};
+  var t = {};
+  for( i=1,100 ) {
+    setmetatable(t, mt1);
+    assert(getmetatable(t) == mt1);
+    setmetatable(t, mt2);
+    assert(getmetatable(t) == mt2);
+  }
+  assert(getmetatable(t) == mt2);
+}
+
+{ //- 5. Store with same ref, different value and aliased loads.
+//        Cannot eliminate any stores.
+  var mt1 = {};
+  var mt2 = {};
+  var t1 = {};
+  var t2 = t1;
+  for( i=1,100 ) {
+    setmetatable(t1, mt1);
+    assert(getmetatable(t2) == mt1);
+    setmetatable(t1, mt2);
+    assert(getmetatable(t2) == mt2);
+  }
+  assert(getmetatable(t1) == mt2);
+}

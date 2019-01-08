@@ -1,0 +1,81 @@
+
+var what;
+
+var function mm(a, b) {
+  var dbg = debug.getinfo(1);
+  what = dbg.namewhat == "metamethod" && dbg.name ||
+					  dbg.namewhat.." "..(dbg.name || "?");
+}
+
+var function ck(s) {
+  assert(what == s, "bad debug info for metamethod "..s);
+}
+
+var mt = {
+  __index = mm,
+  __newindex = mm,
+  __eq = mm,
+  __add = mm,
+  __sub = mm,
+  __mul = mm,
+  __div = mm,
+  __mod = mm,
+  __pow = mm,
+  __unm = mm,
+  __len = mm,
+  __lt = mm,
+  __le = mm,
+  __concat = mm,
+  __call = mm,
+};
+
+{ //- table metamethods +goto
+  var t = setmetatable({}, mt);
+  var t2 = setmetatable({}, mt);
+
+  var x = t.x;		ck("__index");
+  t.x = 1;		ck("__newindex");
+  x = t + t;	ck("__add");
+  x = t - t;	ck("__sub");
+  x = t * t;	ck("__mul");
+  x = t / t;	ck("__div");
+  x = t % t;	ck("__mod");
+  x = t ** t;	ck("__pow");
+  x = -t;		ck("__unm");
+  x = t..t;		ck("__concat");
+  x = t();		ck("local t");
+
+  x = t == t2;	ck("__eq");
+  x = t != t2;	ck("__eq");
+  x = t < t2;	ck("__lt");
+  x = t > t2;	ck("__lt");
+  x = t <= t2;	ck("__le");
+  x = t >= t2;	ck("__le");
+}
+
+{ //- userdata metamethods +luajit
+  var u = newproxy();
+  var u2 = newproxy();
+  debug.setmetatable(u, mt);
+  debug.setmetatable(u2, mt);
+
+  var x = u.x;		ck("__index");
+  u.x = 1;		ck("__newindex");
+  x = u + u;	ck("__add");
+  x = u - u;	ck("__sub");
+  x = u * u;	ck("__mul");
+  x = u / u;	ck("__div");
+  x = u % u;	ck("__mod");
+  x = u ** u;	ck("__pow");
+  x = -u;		ck("__unm");
+  x = #u;		ck("__len");
+  x = u..u;		ck("__concat");
+  x = u();		ck("local u");
+
+  x = u == u2;	ck("__eq");
+  x = u != u2;	ck("__eq");
+  x = u < u2;	ck("__lt");
+  x = u > u2;	ck("__lt");
+  x = u <= u2;	ck("__le");
+  x = u >= u2;	ck("__le");
+}

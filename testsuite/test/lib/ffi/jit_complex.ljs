@@ -1,0 +1,109 @@
+var ffi = require("ffi");
+
+var cx = ffi.typeof("complex");
+var cxf = ffi.typeof("complex float");
+
+ffi.cdef([=[
+typedef struct jit_complex_chain_t {
+  struct jit_complex_chain_t *next;
+  complex c;
+} jit_complex_chain_t;
+]=]);
+
+{ //- field access
+  var c = cx(1, 2);
+  var x;
+  for( i=1,100 ) {
+    x = c.re + c.im;
+  }
+  assert(x == 3);
+}
+
+{ //- one element circular chain, named indexing
+  var cp = ffi.new("jit_complex_chain_t");
+  var p = cp;
+  p.next = p;
+  p.c = cx(1, 2);
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    x +=   p.c.re;
+    y +=   p.c.im;
+    p = p.next;
+  }
+  assert(x == 100);
+  assert(y == 200);
+}
+
+{ //- one element circular chain, array indexing
+  var cp = ffi.new("jit_complex_chain_t");
+  var p = cp;
+  p.next = p;
+  p.c = cx(1, 2);
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    x +=   p.c[0];
+    y +=   p.c[1];
+    p = p.next;
+  }
+  assert(x == 100);
+  assert(y == 200);
+}
+
+{ //- one-arg initialiser
+  var ca = ffi.new("complex[?]", 101);
+  for( i=1,100 ) {
+    ca[i] = cx(i); // handled as init single
+  }
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    x +=   ca[i].re;
+    y +=   ca[i].im;
+  }
+  assert(x == 5050);
+  assert(y == 0);
+}
+
+{ //- two-arg initialiser
+  var ca = ffi.new("complex[?]", 101);
+  for( i=1,100 ) {
+    ca[i] = cx(i, -i);
+  }
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    x +=   ca[i].re;
+    y +=   ca[i].im;
+  }
+  assert(x == 5050);
+  assert(y == -5050);
+}
+
+{ //- float<>double conversions
+  var ca = ffi.new("complex[?]", 101);
+  var caf = ffi.new("complex float[?]", 101);
+  for( i=1,100 ) {
+    ca[i] = cxf(i, -i);
+    caf[i] = cx(i, -i);
+  }
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    x = x + caf[i].re + ca[i].re;
+    y = y + caf[i].im + ca[i].im;
+  }
+  assert(x == 2*5050);
+  assert(y == -2*5050);
+}
+
+{ //- Complex struct field
+  var s = ffi.new("struct { complex x;}");
+  for( i=1,100 ) {
+    s.x = 12.5i;
+  }
+  assert(s.x.re == 0);
+  assert(s.x.im == 12.5);
+}
+
+{ //- Index overflow for complex is ignored
+  var c = cx(1, 2);
+  var x;
+  for( i=1e7,1e7+100 ) { x = c[i]; }
+}

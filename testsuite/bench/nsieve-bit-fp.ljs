@@ -1,0 +1,37 @@
+
+var floor, ceil = math.floor, math.ceil;
+
+var precision = 50; // Maximum precision of lua_Number (minus safety margin).
+var onebits = (2**precision)-1;
+
+var function nsieve(p, m) {
+  var cm = ceil(m/precision);
+  { var onebits = onebits; for( i=0,cm ) { p[i] = onebits; } }
+  var count, idx, bit = 0, 2, 2;
+  for( i=2,m ) {
+    var r = p[idx] / bit;
+    if( r - floor(r) >= 0.5 ) { // Bit set?
+      var kidx, kbit = idx, bit;
+      for( k=i+i,m,i ) {
+        kidx +=   i;
+        while( kidx >= cm ) { kidx -=   cm; kbit +=   kbit; }
+        var x = p[kidx];
+        r = x / kbit;
+        if( r - floor(r) >= 0.5 ) { p[kidx] = x - kbit*0.5; } // Clear bit.
+      }
+      ++count    ;
+    }
+    ++idx    ;
+    if( idx >= cm ) { idx = 0; bit +=   bit; }
+  }
+  return count;
+}
+
+var N = tonumber(arg && arg[1]) || 1;
+if( N < 2 ) { N = 2; }
+var primes = {};
+
+for( i=0,2 ) {
+  var m = (2**(N-i))*10000;
+  io.write(string.format("Primes up to %8d %8d\n", m, nsieve(primes, m)));
+}

@@ -1,0 +1,27 @@
+// Really a test for lua_lessthan()
+var N = 1000;
+
+{ //- numbers
+  math.randomseed(42);
+  var t = {};
+  for( i=1,N ) { t[i] = math.random(N); }
+  table.sort(t);
+  for( i=2,N ) { assert(t[i-1] <= t[i]); }
+}
+
+{ //- strings
+  math.randomseed(42);
+  var t = {};
+  for( i=1,N ) { t[i] = math.random(1, N/10)..""; }
+  table.sort(t);
+  for( i=2,N ) { assert(t[i-1] <= t[i]); }
+}
+
+{ //- tables
+  math.randomseed(42);
+  var mt = { __lt = function(a,b) { return a[1] < b[1]; } };
+  var t = {};
+  for( i=1,N ) { t[i] = setmetatable({ math.random(N) }, mt); }
+  table.sort(t);
+  for( i=2,N ) { assert(t[i-1][1] <= t[i][1]); }
+}

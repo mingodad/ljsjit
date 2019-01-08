@@ -1,0 +1,120 @@
+
+var function create(comp, v1, v2) {
+  var meta = {
+    __lt=function(a,b) { return comp("lt", a, b); },
+    __le=function(a,b) { return comp("le", a, b); },
+  };
+  return setmetatable({v1}, meta), setmetatable({v2}, meta);
+}
+
+{ //- __lt and __le xop
+  var xop;
+  var a, b = create(function(op,a,b) { xop = op; return ""; });
+  assert(a<b == true && xop == "lt"); xop = null;
+  assert(a>b == true && xop == "lt"); xop = null;
+  assert(a<=b == true && xop == "le"); xop = null;
+  assert(a>=b == true && xop == "le"); xop = null;
+
+  assert(! (a<b) == false && xop == "lt"); xop = null;
+  assert(! (a>b) == false && xop == "lt"); xop = null;
+  assert(! (a<=b) == false && xop == "le"); xop = null;
+  assert(! (a>=b) == false && xop == "le"); xop = null;
+
+  // __le metamethod is optional and substituted with arg+res inverted __lt.
+  var f = getmetatable(a).__le;
+  getmetatable(a).__le = null;
+  assert(a<b == true && xop == "lt"); xop = null;
+  assert(a>b == true && xop == "lt"); xop = null;
+  assert(a<=b == false && xop == "lt"); xop = null;
+  assert(a>=b == false && xop == "lt"); xop = null;
+
+  assert(! (a<b) == false && xop == "lt"); xop = null;
+  assert(! (a>b) == false && xop == "lt"); xop = null;
+  assert(! (a<=b) == true && xop == "lt"); xop = null;
+  assert(! (a>=b) == true && xop == "lt"); xop = null;
+  getmetatable(a).__le = f;
+
+  // Different metatable, but same metamethod works, too.
+  setmetatable(b, { __lt = getmetatable(b).__lt, __le = getmetatable(b).__le });
+  assert(a<b == true && xop == "lt"); xop = null;
+  assert(a>b == true && xop == "lt"); xop = null;
+  assert(a<=b == true && xop == "le"); xop = null;
+  assert(a>=b == true && xop == "le"); xop = null;
+
+  assert(! (a<b) == false && xop == "lt"); xop = null;
+  assert(! (a>b) == false && xop == "lt"); xop = null;
+  assert(! (a<=b) == false && xop == "le"); xop = null;
+  assert(! (a>=b) == false && xop == "le"); xop = null;
+}
+
+{ //- __lt and __le values
+  var a, b = create(function(op,a,b) {
+    if( op == "lt" ) { return a[1]<b[1]; } else { return a[1]<=b[1]; } }, 1, 2);
+  assert(a<b == true);
+  assert(a>b == false);
+  assert(a<=b == true);
+  assert(a>=b == false);
+
+  assert(! (a<b) == false);
+  assert(! (a>b) == true);
+  assert(! (a<=b) == false);
+  assert(! (a>=b) == true);
+
+  b[1] = 1;
+  assert(a<b == false);
+  assert(a>b == false);
+  assert(a<=b == true);
+  assert(a>=b == true);
+
+  assert(! (a<b) == true);
+  assert(! (a>b) == true);
+  assert(! (a<=b) == false);
+  assert(! (a>=b) == false);
+
+  a[1] = 2;
+  assert(a<b == false);
+  assert(a>b == true);
+  assert(a<=b == false);
+  assert(a>=b == true);
+
+  assert(! (a<b) == true);
+  assert(! (a>b) == false);
+  assert(! (a<=b) == true);
+  assert(! (a>=b) == false);
+
+  // __le metamethod is optional and substituted with arg+res inverted __lt.
+  getmetatable(a).__le = null;
+  a[1] = 1;
+  b[1] = 2;
+  assert(a<b == true);
+  assert(a>b == false);
+  assert(a<=b == true);
+  assert(a>=b == false);
+
+  assert(! (a<b) == false);
+  assert(! (a>b) == true);
+  assert(! (a<=b) == false);
+  assert(! (a>=b) == true);
+
+  b[1] = 1;
+  assert(a<b == false);
+  assert(a>b == false);
+  assert(a<=b == true);
+  assert(a>=b == true);
+
+  assert(! (a<b) == true);
+  assert(! (a>b) == true);
+  assert(! (a<=b) == false);
+  assert(! (a>=b) == false);
+
+  a[1] = 2;
+  assert(a<b == false);
+  assert(a>b == true);
+  assert(a<=b == false);
+  assert(a>=b == true);
+
+  assert(! (a<b) == true);
+  assert(! (a>b) == false);
+  assert(! (a<=b) == true);
+  assert(! (a>=b) == false);
+}

@@ -1,0 +1,50 @@
+
+if( ! jit || ! jit.status || ! jit.status() ) { return; }
+
+for( i=1,100 ) {
+  if( i==50 ) { jit.flush(2); }
+  for( j=1,100 ) { }
+  for( j=1,100 ) { }
+}
+
+jit.flush();
+
+var function f() { for( i=1,100 ) { } }
+for( i=1,100 ) { var x = gcinfo(); f(); }
+
+jit.flush();
+
+var function fib(n) {
+  if( n < 2 ) { return 1; }
+  return fib(n-2) + fib(n-1);
+}
+
+fib(11);
+
+jit.flush();
+
+var names = {};
+for( i=1,100 ) { names[i] = i; }
+
+function f() {
+  for( k,v in ipairs(names) ) { }
+}
+
+f();
+
+for( i=1,2 ) {
+  f();
+  f();
+  jit.flush();
+}
+
+jit.flush();
+
+jit.flush(1); // ignored
+jit.flush(2); // ignored
+for( i=1,1e7 ) { } // causes trace #1
+
+jit.flush(2); // ignored
+jit.flush(1); // ok
+jit.flush(1); // crashes
+

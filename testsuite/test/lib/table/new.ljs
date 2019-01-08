@@ -1,0 +1,11 @@
+var tnew = require("table.new");
+
+{ //- table.new
+  var x, y;
+  for( i=1,100 ) {
+    x = tnew(100, 30);
+    assert(type(x) == "table");
+    if( i == 90 ) { y = x; }
+  }
+  assert(x != y);
+}

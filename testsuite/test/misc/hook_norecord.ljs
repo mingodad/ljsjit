@@ -1,0 +1,12 @@
+
+if( ! jit || ! jit.status || ! jit.status() ) { return; }
+
+var called = false;
+var function f() { var x = "wrong"; called = true; }
+jit.off(f);
+debug.sethook(f, "", 5);
+for( i=1,1000 ) { var a,b,c,d,e,xf=1,2,3,4,5,6; }
+assert(called);
+// Check that no trace was generated.
+assert(require("jit.util").traceinfo(1) == null);
+

@@ -1,0 +1,37 @@
+
+var sub = string.sub;
+iubc = setmetatable({
+  A="T", C="G", B="V", D="H", K="M", R="Y",
+  a="T", c="G", b="V", d="H", k="M", r="Y",
+  T="A", G="C", V="B", H="D", M="K", Y="R", U="A",
+  t="A", g="C", v="B", h="D", m="K", y="R", u="A",
+  N="N", S="S", W="W", n="N", s="S", w="W",
+}, { __index = function(t, s) {
+  var r = t[sub(s, 2)]..t[sub(s, 1, 1)]; t[s] = r; return r; } });
+
+var wcode = [=[
+return function(t, n) {
+  if( n == 1 ) { return; }
+  var iubc, sub, write = iubc, string.sub, io.write;
+  var s = table.concat(t, "", 1, n-1);
+  for( i=#s-59,1,-60 ) {
+    write(]=];
+for( i=59,3,-4 ) { wcode = wcode.."iubc[sub(s, i+"..(i-3)..", i+"..i..")], "; }
+wcode = wcode..[=["\n")
+  }
+  var r = #s % 60;
+  if( r != 0 ) {
+    for( i=r,1,-4 ) { write(iubc[sub(s, i-3 < 1 && 1 || i-3, i)]); }
+    write("\n");
+  }
+}
+]=];
+var writerev = loadstring(wcode)();
+
+var t, n = {}, 1;
+for( line in io.lines() ) {
+  var c = sub(line, 1, 1);
+  if( c == ">" ) { writerev(t, n); io.write(line, "\n"); n = 1;
+  } else if( c != ";" ) { t[n] = line; ++n    ; }
+}
+writerev(t, n);

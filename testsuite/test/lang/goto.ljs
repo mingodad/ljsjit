@@ -1,0 +1,153 @@
+var loadstring = loadstring || load;
+
+var function expect(src, msg) {
+  var ok, err = loadstring(src);
+  if( msg ) {
+    assert(! ok && string.find(err, msg), err);
+  } else {
+    assert(ok, err);
+  }
+}
+  
+{ //- Basic goto and label semantics.
+  // Error: duplicate label.
+  expect("a: a:", "'a'");
+  expect("a: b: { b: } a:", "'a'");
+
+  // Error: undefined label.
+  expect("goto a", "'a'");
+  expect("goto a; b:", "'a'");
+  expect("{ a: }; goto a", "'a'");
+  expect("goto a; { a: }", "'a'");
+  expect("break", "break");
+  expect("if( x ) { break }", "break");
+
+  // Error: goto into variable scope.
+  expect("goto a; var x; a: var y", "'x'");
+  expect("{ var v,w; goto a; }; var x; a: var y", "'x'");
+  expect("do { goto a; var x; a: } while(! x );", "'x'");
+
+  a: { goto a; a: } // Forward jump, not an infinite loop.
+}
+
+{ //- Goto is not a keyword. -compat5.2 !lex !private_G
+//  goto = 1
+}
+
+{ //- Goto is a keyword. +compat5.2
+  expect("goto = 1", "<name>");
+}
+
+{ //- Trailing label is considered to be out of scope.
+  var x = 11;
+  /* FIXME
+  {
+    goto a;
+    goto a;
+    var y = 22;
+    x = y;
+    a:
+    b:
+  }
+  */
+  assert(x == 11);
+}
+
+{ //- Trailing labels and empty statements are considered to be out of scope. +compat5.2 !lex
+  var x = 11;
+  /* FIXME
+  {
+    goto a;
+    goto a;
+    var y = 22;
+    x = y;
+    a: ;;
+    b: ;;
+  }
+  */
+  assert(x == 11);
+}
+
+{ //- Simple loop with cross-jumping.
+  var x = 1;
+  while( true ) {
+    goto b;
+    a: if( x < 100 ) { goto c; }
+    goto d;
+    b: ++x    ; goto a;
+    c:
+  }
+  d:
+  assert(x == 100);
+}
+
+{ //- Backwards goto must close upval.
+  var t = {};
+  var i = 1;
+  a:
+  var x;
+  t[i] = function() { return x; };
+  x = i;
+  ++i    ;
+  if( i <= 2 ) { goto a; }
+  assert(t[1]() == 1);
+  assert(t[2]() == 2);
+}
+
+{ //- Break must close upval, even if closure is parsed after break.
+  var foo;
+  do {
+    var x;
+    a:
+    if( x ) { break; }
+    function foo() { return x; }
+    x = true;
+    goto a;
+  } while(!( false) );
+  assert(foo() == true);
+}
+
+{ //- Label prevents joining to KNIL. -lua==5.2
+  var k = 0;
+  var x;
+  foo:
+  var y;
+  assert(y == null);
+  y = true;
+  ++k    ;
+  if( k < 2 ) { goto foo; }
+}
+
+{ //- Break resolved from the right scope.
+  var function p(lvl) {
+     lvl = lvl || 1;
+     while( true ) {
+	++lvl    ;
+	if( lvl == null ) { break; }
+	var idx = 1;
+	while( true ) {
+	   if( key == null ) { break; }
+	   ++idx    ;
+	}
+     }
+  }
+}
+
+{ //- Do not join twice with UCLO.
+  while( true ) {
+    {
+      var x;
+      var function f() { return x; }
+    }
+    break;
+  }
+
+  while( true ) {
+    {
+      var x;
+      var function f() { return x; }
+    }
+    goto foo;
+  }
+  foo:
+}

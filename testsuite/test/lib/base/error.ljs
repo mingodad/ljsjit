@@ -1,0 +1,43 @@
+{ //- no message
+  var ok, msg = pcall(error);
+  assert(ok == false);
+  assert(msg == null);
+}
+
+{ //- level 0
+  var ok, msg = pcall(error, "emsg", 0);
+  assert(ok == false);
+  assert(msg == "emsg");
+}
+
+{ //- default level
+  var ok, msg = pcall(error, "emsg");
+  assert(ok == false);
+  assert(msg == "emsg");
+}
+
+{ //- default level in xpcall
+  var line;
+  var ok, msg = xpcall(function() {
+    var x;
+    line = debug.getinfo(1, "l").currentline; error("emsg");
+  }, function(m) {
+    assert(debug.getlocal(3, 1) == "x");
+    return m .."xp";
+  });
+  assert(ok == false);
+  assert(msg->find("^.-:".. line ..": emsgxp$"));
+}
+
+{ //- level 2 in xpcall
+  var line;
+  var ok, msg = xpcall(function() {
+    var function f() { error("emsg", 2); }
+    line = debug.getinfo(1, "l").currentline; f();
+  }, function(m) {
+    assert(debug.getlocal(4, 1) == "f");
+    return m .."xp2";
+  });
+  assert(ok == false);
+  assert(msg->find("^.-:".. line ..": emsgxp2$"));
+}

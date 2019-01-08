@@ -1,0 +1,95 @@
+var ctest = require("ctest");
+
+var called = 0;
+var function clearhook() { debug.sethook(null, "", 0); }
+
+// Return from pcall with active hook must prepend true. FF pcall.
+called = 0;
+debug.sethook(function() { ++called; assert(pcall(function() { }) == true); clearhook(); }, "", 1);
+{ var x = 1; }
+assert(called == 1);
+
+// Hook with special caught error must not unblock hooks. FF pcall.
+called = 0;
+debug.sethook(function() { ++called; pcall(null); clearhook(); }, "", 1);
+{ var x = 1; }
+assert(called == 1);
+
+// Hook with caught error must not unblock hooks. FF pcall.
+called = 0;
+var function p2() { error(""); }
+debug.sethook(function() { ++called; pcall(p2); clearhook(); }, "", 1);
+{ var x = 1; }
+assert(called == 1);
+
+// Hook with special caught error must not unblock hooks. C pcall.
+called = 0;
+debug.sethook(function() { ++called; ctest.pcall(null); clearhook(); }, "", 1);
+{ var x = 1; }
+assert(called == 1);
+
+// Hook with caught error must not unblock hooks. C pcall
+called = 0;
+var function p2() { error(""); }
+debug.sethook(function() { ++called; ctest.pcall(p2); clearhook(); }, "", 1);
+{ var x = 1; }
+assert(called == 1);
+
+// Regular pcall must not block hooks.
+debug.sethook(function() { ++called; }, "", 1);
+pcall(function() { });
+called = 0;
+{ var x = 1; }
+assert(called > 0);
+pcall(function() { error(""); });
+called = 0;
+{ var x = 1; }
+assert(called > 0);
+ctest.pcall(function() { });
+called = 0;
+{ var x = 1; }
+assert(called > 0);
+ctest.pcall(function() { error(""); });
+called = 0;
+{ var x = 1; }
+assert(called > 0);
+clearhook();
+
+// Hook with uncaught error must unblock hooks. FF pcall
+called = 0;
+pcall(function() {
+  debug.sethook(function() {
+    var old = called;
+    called = 1;
+    if( old == 0 ) { error(""); }
+  }, "", 1);
+  { var x = 1; }
+});
+assert(called == 1);
+called = 2;
+{ var x = 1; }
+assert(called == 1, "hook not unblocked after uncaught error");
+clearhook();
+called = 2;
+{ var x = 1; }
+assert(called == 2);
+
+// Hook with uncaught error must unblock hooks. C pcall
+called = 0;
+ctest.pcall(function() {
+  debug.sethook(function() {
+    var old = called;
+    called = 1;
+    if( old == 0 ) { error(""); }
+  }, "", 1);
+  { var x = 1; }
+});
+assert(called == 1);
+called = 2;
+{ var x = 1; }
+assert(called == 1, "hook not unblocked after uncaught error");
+clearhook();
+called = 2;
+{ var x = 1; }
+assert(called == 2);
+

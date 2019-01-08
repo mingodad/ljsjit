@@ -1,0 +1,8 @@
+var function f(i) {
+  if( i > 0 ) { return f(i-1); }
+  return 1;
+}
+
+var x = 0;
+for( i=1,100 ) { x +=   f(1000); }
+assert(x == 100);

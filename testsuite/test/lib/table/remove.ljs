@@ -1,0 +1,42 @@
+var tremove = table.remove;
+var assert = assert;
+
+{ //- table.remove(t) removes correct entries
+  var t = {};
+  for( i=1,200 ) { t[i] = i; }
+  for( i=1,100 ) { tremove(t); }
+  assert(#t == 100 && t[100] == 100);
+}
+
+{ //- table.remove(t) returns the removed entry
+  var t = {};
+  for( i=1,200 ) { t[i] = i; }
+  for( i=1,100 ) { assert(tremove(t) == 201-i); }
+  assert(#t == 100 && t[100] == 100);
+}
+
+{ //- table.remove(t, 1) removes and returns the first entry
+  var t = {};
+  for( i=1,200 ) { t[i] = i; }
+  for( i=1,100 ) { assert(tremove(t, 1) == i); }
+  assert(#t == 100 && t[100] == 200);
+}
+
+{ //- TSETR hash part +table.new
+  var tnew = require("table.new");
+  var t = tnew(0, 16);
+  for( i=10,1,-1 ) { t[i] = i+3; }
+  for( i=10,1,-1 ) { assert(tremove(t) == i+3); }
+  assert(#t == 0);
+}
+
+{ //- TSETR write barrier +table.new
+  var tnew = require("table.new");
+  for( _, t in ipairs({{}, tnew(0, 16)}) ) {
+    for( i = 1, 10 ) { t[i] = {i}; }
+    for( i = 1, 10 ) {
+      collectgarbage();
+      assert(tremove(t, 1)[1] == i);
+    }
+  }
+}

@@ -1,0 +1,29 @@
+var char = string.char;
+
+{ //- jit one char
+  var y;
+  for( i=1,100 ) { y = char(65); }
+  assert(y == "A");
+  var x = 97;
+  for( i=1,100 ) { y = char(x); }
+  assert(y == "a");
+  x = "98";
+  for( i=1,100 ) { y = char(x); }
+  assert(y == "b");
+  for( i=1,100 ) { y = char(32+i); }
+  assert(y == "\132");
+}
+
+{ //- jit until out of bounds
+  var y;
+  assert(! pcall(function() {
+    for( i=1,200 ) { y = char(100+i); }
+  }));
+  assert(y == "\255");
+}
+
+{ //- jit five chars
+  var y;
+  for( i=1,100 ) { y = char(65, 66, i, 67, 68); }
+  assert(y == "ABdCD");
+}

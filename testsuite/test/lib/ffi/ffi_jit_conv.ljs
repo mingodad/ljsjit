@@ -1,0 +1,277 @@
+var ffi = require("ffi");
+
+var ctest = require("ctest");
+
+{
+  var s = ffi.new("struct { int32_t x; }");
+  s.x = -0x12345678;
+  for( i=1,100 ) {
+    s.x = s.x + 1; // narrowed
+  }
+  assert(s.x == -0x12345678+100);
+}
+
+{
+  var s = ffi.new("struct { uint32_t x; }");
+  s.x = 0x81234567;
+  for( i=1,100 ) {
+    s.x = s.x + 1; // CONV.num.u32, CONV.u32.num (no narrowing yet)
+  }
+  assert(s.x == 0x81234567+100);
+}
+
+{
+  var s = ffi.new("struct { int8_t x; }");
+  s.x = 42;
+  for( i=1,100 ) {
+    s.x = s.x + 1;
+    assert(s.x >= -128 && s.x <= 127); // fwd -> CONV.int.i8
+  }
+  assert(s.x == 142-256);
+}
+
+{
+  var s = ffi.new("struct { uint8_t x; }");
+  s.x = 200;
+  for( i=1,100 ) {
+    s.x = s.x + 1;
+    assert(s.x >= 0 && s.x <= 255); // fwd -> CONV.int.u8
+  }
+  assert(s.x == 300-256);
+}
+
+{
+  var s = ffi.new("struct { int16_t x; }");
+  s.x = 32700;
+  for( i=1,100 ) {
+    s.x = s.x + 1;
+    assert(s.x >= -32768 && s.x <= 32767); // fwd -> CONV.int.i16
+  }
+  assert(s.x == 32800-65536);
+}
+
+{
+  var s = ffi.new("struct { uint16_t x; }");
+  s.x = 65450;
+  for( i=1,100 ) {
+    s.x = s.x + 1;
+    assert(s.x >= 0 && s.x <= 65535); // fwd -> CONV.int.u16
+  }
+  assert(s.x == 65550-65536);
+}
+
+{
+  var s = ffi.new("union { int32_t x; uint32_t y; }");
+  s.x = 0x7fffffff - 60;
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    if( s.x == 0x7fffffff ) { s.x = -0x80000000; } else { s.x = s.x + 1; }
+    x +=   s.x; // fwd -> CONV.num.int
+    y +=   s.y; // fwd -> CONV.num.u32
+  }
+  assert(s.x == 0x7fffffff - 60 + 100 - 2**32);
+  assert(s.y == 0x7fffffff - 60 + 100);
+  assert(y == (0x7fffffff - 60) * 100 + 5050);
+  assert(x == y - 40*2**32);
+}
+
+{
+  var s = ffi.new("union { int32_t x; uint32_t y; }");
+  var x, z = 0, 2**31 + 42;
+  for( i=1,100 ) {
+    s.y = z;
+    x +=   s.x; // fwd -> CONV.int.u32 (dummy)
+  }
+  assert(x == 100*(-2**31 + 42));
+}
+
+{
+  var s = ffi.new("union { int8_t x; uint8_t y; }");
+  s.x = 42;
+  var x,y = 0,0;
+  for( i=1,100 ) {
+    s.x = s.x + 1;
+    x +=   s.x; // fwd -> CONV.int.i8, CONV.num.int
+    y +=   s.y; // fwd -> CONV.int.u8, CONV.num.int
+  }
+  assert(s.x == 142 - 256);
+  assert(s.y == 142);
+  assert(y == 42 * 100 + 5050);
+  assert(x == y - (100-(127-42))*256);
+}
+
+{
+  var a = ffi.new("uint32_t[?]", 101);
+  for( i=1,100 ) { a[i] = 0x80000000+i; }
+  var x = 0;
+  for( i=1,100 ) {
+    x = bit.bxor(x, a[i]); // FOLD TOBIT + CONV.num.u32
+  }
+  assert(x == 100);
+}
+
+{
+  var a = ffi.new("uint32_t[?]", 101);
+  for( i=1,100 ) { a[i] = 0x80000000+i; }
+  var x = 0;
+  for( i=1,100 ) {
+    x = bit.bxor(a[i], 0); // FOLD TOBIT + CONV.num.u32
+  }
+  assert(x == -0x80000000+100);
+}
+
+{
+  var v = ffi.new("float", 12.5);
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(v); // CONV.num.flt
+  }
+  assert(x == 100*12.5);
+}
+
+{
+  var v = ffi.new("uint32_t", 0x80000000);
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(v); // CONV.num.u32
+  }
+  assert(x == 100*0x80000000);
+}
+
+{
+  var v = ffi.new("int64_t", 0x1234567800000000ll);
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(v); // CONV.num.i64
+  }
+  assert(x == 100*0x12345678*2**32);
+}
+
+{
+  var v = ffi.new("uint64_t", 0x89abcdef00000000ull);
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(v); // CONV.num.u64
+  }
+  assert(x == 100*0x89abcdef*2**32);
+}
+
+{
+  var a = ffi.new("int64_t[?]", 101);
+  for( i=1,100 ) { a[i] = -i; }
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(a[i]); // CONV.num.i64
+  }
+  assert(x == -5050);
+}
+
+{
+  var a = ffi.new("uint64_t[?]", 101);
+  for( i=1,100 ) { a[i] = 2**63+2**32*i; }
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(a[i]); // CONV.num.u64
+  }
+  assert(x == 2**63*100+2**32*5050);
+}
+
+{
+  var v = ffi.new("complex", 12.5, -3.25);
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   tonumber(v);
+  }
+  assert(x == 100*12.5);
+}
+
+{
+  var s = ffi.new("struct { int64_t x;}");
+  for( i=1,100 ) {
+    s.x = 0x123456789abcdef0LL;
+  }
+  assert(tonumber(s.x) == tonumber(0x123456789abcdef0LL));
+}
+
+{
+  var s = ffi.new("struct { uint64_t x;}");
+  for( i=1,100 ) {
+    s.x = 0x823456789abcdef0ULL;
+  }
+  assert(tonumber(s.x) == tonumber(0x823456789abcdef0ULL));
+}
+
+{
+  ffi.cdef([=[
+  typedef enum { AA, BB, CC = -42 } foo_i;
+  typedef enum { DD, EE, FF = 0x80000000u } foo_u;
+  ]=]);
+  var s = ffi.new("struct { foo_i x; foo_u y;}");
+  for( i=1,100 ) {
+    s.x = "CC";
+    assert(s.x == -42);
+    s.x = "BB";
+    assert(s.x == 1);
+    s.y = "FF";
+    assert(s.y == 0x80000000);
+  }
+  var st = ffi.typeof(s);
+  for( i=1,100 ) { s = st(); }
+  assert(s.x == 0 && s.y == 0);
+  for( i=1,100 ) { s = st("CC", "EE"); }
+  assert(s.x == -42 && s.y == 1);
+  var ei = ffi.new("foo_i", "CC");
+  var eu = ffi.new("foo_u", "EE");
+  for( i=1,100 ) { s = st(ei, eu); }
+  assert(s.x == -42 && s.y == 1);
+  var x;
+  for( i=1,100 ) { x = tonumber(ei); }
+  assert(x == -42);
+}
+
+{
+  var s = ffi.new("struct { const char *x; const char *y;}");
+  var a, tmp = "abcd", "ab";
+  for( i=1,100 ) {
+    s.x = "abc";
+    s.y = string.sub(a, 1, 2);
+  }
+  assert(ffi.string(s.x) == "abc");
+  assert(ffi.string(s.y) == "ab");
+}
+
+{
+  var s = ffi.new("struct { bool b[200]; int i[200]; double d[200];}");
+  for( i=0,199 ) { s.i[i] = i-100; s.d[i] = i-100; }
+  for( i=0,99 ) { s.b[i] = 0; }
+  for( i=100,199 ) { s.b[i] = 1; }
+  for( i=0,99 ) { assert(s.b[i] == false); }
+  for( i=100,199 ) { assert(s.b[i] == true); }
+  for( i=0,199 ) { s.b[i] = s.i[i]; }
+  for( i=0,199 ) { assert(s.b[i] == (i != 100)); }
+  for( i=0,199 ) { s.b[i] = s.d[i]; }
+  for( i=0,199 ) { assert(s.b[i] == (i != 100)); }
+}
+
+{
+  var a = ffi.new("int16_t[100]", 1);
+  for( i=1,99 ) { a[i] = a[i] + a[i-1]; }
+  assert(a[99] == 100);
+}
+
+{
+  var ud = ctest.lightud(12345678);
+  var s = ffi.new("struct { void *p; }");
+  for( i=1,100 ) {
+    assert(ffi.cast("uintptr_t", ud) == 12345678);
+    s.p = ud;
+  }
+  assert(ffi.cast("uintptr_t", s.p) == 12345678);
+}
+
+{
+  var x = ffi.new("struct { int & x;}", ffi.new("int[1]", 42));
+  var z;
+  for( i=1,100 ) { z = x.x; }
+  assert(z == 42);
+}

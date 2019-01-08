@@ -1,0 +1,20 @@
+
+var r = 0;
+var function g() {
+  ++r    ;
+  for( i=1,100 ) { }
+}
+
+var function f() {
+  for( j=1,20 ) {
+    if( j > 19 ) {
+      return g(); // Tailcall at base.
+      // Let this link to the already compiled loop in g().
+    }
+  }
+}
+
+g(); // Compile this loop first.
+for( i=1,50 ) { f(); }
+assert(r == 51);
+

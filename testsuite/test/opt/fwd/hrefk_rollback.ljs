@@ -1,0 +1,32 @@
+{ //- https://github.com/LuaJIT/LuaJIT/issues/124
+  var function foo(a, b, f) {
+    return f && (a.f0 < b.f1 &&
+                  b.f0 < a.f1 &&
+                  a.f2 < b.f3 &&
+                  b.f2 < a.f3);
+  }
+
+  var function bar(f0, f1, f2, f3, X, f) {
+    for( _, v in ipairs(X) ) {
+      var b = {};
+      b.f0 = 0;
+      b.f2 = v;
+      b.f1 = b.f0 + 1;
+      b.f3 = b.f2 + 1;
+
+      if( foo({f0 = f0, f1 = f1, f2 = f2, f3 = f3}, b, f) ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  var X = { 0, 1, 0, 0 };
+
+  for( i = 1, 20 ) {
+    assert(bar(0, 1, 2, 3, X, true));
+  }
+
+  assert(! bar(0, 1, 1, 2, X, true));
+}

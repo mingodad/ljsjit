@@ -1,0 +1,8 @@
+{ //- traceback
+  var co = coroutine.create(function() {
+    var x = null;
+    var y = x.x;
+  });
+  assert(coroutine.resume(co) == false);
+  debug.traceback(co);
+}

@@ -1,0 +1,201 @@
+var ffi = require("ffi");
+
+ffi.cdef([=[
+typedef struct { int a, b, c; } jit_struct_foo_t;
+typedef struct { int a, b, c; } jit_struct_foo2_t;
+typedef struct { int a[10]; int b[10]; } jit_struct_sarr_t;
+typedef struct jit_struct_chain_t {
+  struct jit_struct_chain_t *next;
+  int v;
+} jit_struct_chain_t;
+]=]);
+
+{ //- iteration variable as field name
+  var s = ffi.new("jit_struct_foo_t");
+  for( j,k in ipairs({ "a", "b", "c" }) ) {
+    for( i=1,100 ) { s[k] = s[k] + j; }
+  }
+  assert(s.a == 100);
+  assert(s.b == 200);
+  assert(s.c == 300);
+}
+
+{ //- constant field names
+  var s = ffi.new("jit_struct_foo_t");
+  for( i=1,100 ) {
+    s.a = s.a + 1;
+    s.b = s.b + 2;
+    s.c = s.c + 3;
+  }
+  assert(s.a == 100);
+  assert(s.b == 200);
+  assert(s.c == 300);
+}
+
+{ //- constants from structure
+  var s = ffi.new("jit_struct_foo_t");
+  var s2 = ffi.new("jit_struct_foo2_t", 1, 2, 3);
+  for( i=1,100 ) {
+    s.a = s.a + s2.a;
+    s.b = s.b + s2.b;
+    s.c = s.c + s2.c;
+  }
+  assert(s.a == 100);
+  assert(s.b == 200);
+  assert(s.c == 300);
+}
+
+{ //- adding to array elements
+  var s = ffi.new("jit_struct_sarr_t");
+  for( i=1,100 ) {
+    s.a[5] = s.a[5] + 1;
+    s.b[5] = s.b[5] + 2;
+  }
+  assert(s.a[5] == 100);
+  assert(s.b[5] == 200);
+}
+
+{ //- double indexing
+  var s = ffi.new([=[
+	struct {
+	  struct {
+	    int x;
+	    int b[10];
+	  } a[100];
+	}]=]);
+  s.a[10].b[4] = 10;
+  s.a[95].b[4] = 95;
+  var x = 0;
+  for( i=1,100 ) {
+    x +=   s.a[i-1].b[4]; // reassociate offsets for base and index
+  }
+  assert(x == 105);
+}
+
+{ //- structurally identical
+  var s1 = ffi.new("struct { int a; }");
+  var s2 = ffi.new("struct { int a; }");
+  var x = 0;
+  for( j=1,2 ) {
+    for( i=1,100 ) {
+      s2.a = i;
+      s1.a = 1;
+      x +=   s2.a; // cannot forward across aliasing store
+    }
+    if( j == 1 ) {
+      assert(x == 5050);
+      s2 = s1;
+      x = 0;
+    } else {
+      assert(x == 100);
+    }
+  }
+}
+
+{ //- structurally different
+  var s1 = ffi.new("struct { int a; }");
+  var s2 = ffi.new("struct { char a; }");
+  var x = 0;
+  for( j=1,2 ) {
+    for( i=1,100 ) {
+      s2.a = i;
+      s1.a = 1;
+      x +=   s2.a; // can forward across aliasing store
+    }
+    if( j == 1 ) {
+      assert(x == 5050);
+      s2 = s1; // this will cause a side trace
+      x = 0;
+    } else {
+      assert(x == 100);
+    }
+  }
+}
+
+{ //- union
+  var s = ffi.new("union { uint8_t a; int8_t b; }");
+  var x = 0;
+  for( i=1,200 ) {
+    s.a = i;
+    x +=   s.b; // same offset, but must not alias (except if sign-extended)
+  }
+  assert(x == 1412);
+}
+
+{ //- circular chain
+  var s1 = ffi.new("jit_struct_chain_t");
+  var s2 = ffi.new("jit_struct_chain_t");
+  var s3 = ffi.new("jit_struct_chain_t");
+  s1.next = s2;
+  s2.next = s3;
+  s3.next = s1;
+  var p = s1;
+  for( i=1,99 ) {
+    p.v = i;
+    p = p.next;
+  }
+  assert(s1.v == 97);
+  assert(s2.v == 98);
+  assert(s3.v == 99);
+}
+
+{ //- int struct initialiser
+  var ct = ffi.typeof("struct { int a,b,c; }");
+  var x,y,z = 0,0,0;
+  for( i=1,100 ) {
+    var s = ct(i, i+1);
+    x +=   s.a;
+    y +=   s.b;
+    z +=   s.c;
+  }
+  assert(x == 5050);
+  assert(y == 5150);
+  assert(z == 0);
+}
+
+{ //- double struct initialiser
+  var ct = ffi.typeof("struct { double a,b,c; }");
+  var x,y,z = 0,0,0;
+  for( i=1,100 ) {
+    var s = ct(i, i+1);
+    x +=   s.a;
+    y +=   s.b;
+    z +=   s.c;
+  }
+  assert(x == 5050);
+  assert(y == 5150);
+  assert(z == 0);
+}
+
+{ //- pointer / int struct initialiser
+  var s1 = ffi.new("jit_struct_chain_t");
+  var s;
+  for( i=1,100 ) {
+    s = ffi.new("jit_struct_chain_t", s1, i);
+  }
+  assert(tonumber(ffi.cast("int", s.next)) ==
+	 tonumber(ffi.cast("int", ffi.cast("jit_struct_chain_t *", s1))));
+  assert(s.v == 100);
+}
+
+{ //- unstable pointer/int type struct initialiser
+  var ct = ffi.typeof("struct { int *p; int y; }");
+  var s;
+  for( i=1,200 ) {
+    if( i == 100 ) { ct = ffi.typeof("jit_struct_chain_t"); }
+    s = ct(null, 10);
+  }
+  assert(s.v == 10);
+}
+
+{ //- upvalued int box
+  var s = ffi.new("struct { int x; }", 42);
+  var function f() {
+    for( i=1,100 ) {
+      s.x = i;
+      assert(s.x == i);
+    }
+  }
+  f();
+}
+

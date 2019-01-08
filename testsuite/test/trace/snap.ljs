@@ -1,0 +1,47 @@
+{ //- gcexit
+  var x = 0;
+  var t;
+  for( i=1,1000 ) {
+    if( i >= 100 ) {
+      // causes an exit for atomic phase
+      // must not merge snapshot #0 with comparison since it has the wrong PC
+      if( i < 150 ) { ++x; }
+      t = {i};
+    }
+  }
+  assert(x == 50);
+  assert(t[1] == 1000);
+}
+
+
+{ //- top !private_G
+  function randomtable(entries, depth) {
+    if( depth == 0 ) {
+      return tostring(math.random(2)); // snapshot between return and CALLMT
+    }
+    var t = {};
+    for( k=1,entries ) {
+      t[k] = randomtable(entries, depth-1);
+    }
+    return t;
+  }
+
+  var t = randomtable(10, 2);
+}
+
+{ //- top2
+  var function f() {
+    gcinfo();
+    var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+    var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+    var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+    var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+    var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+    var _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_;
+  }
+
+  for( i=1,100 ) {
+    f();
+    if( i % 3 == 0 ) { collectgarbage(); }
+  }
+}

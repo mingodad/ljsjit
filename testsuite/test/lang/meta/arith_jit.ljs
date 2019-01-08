@@ -1,0 +1,68 @@
+
+{ //- assert rhs
+  var t = {};
+  var mt = {
+    __add = function(a, b) { assert(b == t); return a+11; },
+    __sub = function(a, b) { assert(b == t); return a+12; },
+    __mul = function(a, b) { assert(b == t); return a+13; },
+    __div = function(a, b) { assert(b == t); return a+14; },
+    __mod = function(a, b) { assert(b == t); return a+15; },
+    __pow = function(a, b) { assert(b == t); return a+16; },
+    __unm = function(a, b) { assert(a == t && b == t); return 17; },
+  };
+  t = setmetatable(t, mt);
+  { var x = 0; for( i=1,100 ) { x +=   t; }; assert(x == 1100); }
+  { var x = 0; for( i=1,100 ) { x -=   t; }; assert(x == 1200); }
+  { var x = 0; for( i=1,100 ) { x *=   t; }; assert(x == 1300); }
+  { var x = 0; for( i=1,100 ) { x /=   t; }; assert(x == 1400); }
+  { var x = 0; for( i=1,100 ) { x %=   t; }; assert(x == 1500); }
+  { var x = 0; for( i=1,100 ) { x = x ** t; }; assert(x == 1600); }
+  { var x = 0; for( i=1,100 ) { x = x + (-t); }; assert(x == 1700); }
+}
+
+{ //- assert lhs
+  var t = {};
+  var mt = {
+    __add = function(a, b) { assert(a == t); return b+11; },
+    __sub = function(a, b) { assert(a == t); return b+12; },
+    __mul = function(a, b) { assert(a == t); return b+13; },
+    __div = function(a, b) { assert(a == t); return b+14; },
+    __mod = function(a, b) { assert(a == t); return b+15; },
+    __pow = function(a, b) { assert(a == t); return b+16; },
+  };
+  t = setmetatable(t, mt);
+  { var x = 0; for( i=1,100 ) { x = t + x; }; assert(x == 1100); }
+  { var x = 0; for( i=1,100 ) { x = t - x; }; assert(x == 1200); }
+  { var x = 0; for( i=1,100 ) { x = t * x; }; assert(x == 1300); }
+  { var x = 0; for( i=1,100 ) { x = t / x; }; assert(x == 1400); }
+  { var x = 0; for( i=1,100 ) { x = t % x; }; assert(x == 1500); }
+  { var x = 0; for( i=1,100 ) { x = t ** x; }; assert(x == 1600); }
+}
+
+{ //- assert both sides
+  var t = {};
+  var mt = {
+    __add = function(a, b) { assert(a == t && b == t); return 11; },
+    __sub = function(a, b) { assert(a == t && b == t); return 12; },
+    __mul = function(a, b) { assert(a == t && b == t); return 13; },
+    __div = function(a, b) { assert(a == t && b == t); return 14; },
+    __mod = function(a, b) { assert(a == t && b == t); return 15; },
+    __pow = function(a, b) { assert(a == t && b == t); return 16; },
+  };
+  t = setmetatable(t, mt);
+  { var x = 0; for( i=1,100 ) { x = t + t; }; assert(x == 11); }
+  { var x = 0; for( i=1,100 ) { x = t - t; }; assert(x == 12); }
+  { var x = 0; for( i=1,100 ) { x = t * t; }; assert(x == 13); }
+  { var x = 0; for( i=1,100 ) { x = t / t; }; assert(x == 14); }
+  { var x = 0; for( i=1,100 ) { x = t % t; }; assert(x == 15); }
+  { var x = 0; for( i=1,100 ) { x = t ** t; }; assert(x == 16); }
+}
+
+{ //- adjust no result to one result
+  var t = {};
+  var mt = { __add = function(a, b) { } };
+  t = setmetatable(t, mt);
+  var x;
+  for( i=1,100 ) { x = t+t; }
+  assert(x == null);
+}

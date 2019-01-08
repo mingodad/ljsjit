@@ -1,0 +1,55 @@
+
+var t = {};
+for( i=1,26 ) { t[i] = string.char(96+i); }
+
+var function tcheck(t1, t2) {
+  assert(#t1 == #t2);
+  for( i=1,#t1 ) { assert(t1[i] == t2[i]); }
+}
+
+var function foo1(...) { // VARG RETM
+  return ...;
+}
+
+var function foo2(...) { // VARG UCLO RETM
+  var function dummy() { }
+  return ...;
+}
+
+var function foo3(...) { // VARG UCLO -> RETM
+  { return ...; }
+  var function dummy() { }
+}
+
+var function foo4() { // UCLO UCLO RET
+  {
+    var x;
+    var function dummy() { return x; }
+  }
+}
+
+called = false;
+debug.sethook(function() { var x = "wrong"; called = true; }, "", 1);
+tcheck(t, {foo1(unpack(t))}); // CALLM TSETM
+assert(called);
+called = false;
+tcheck(t, {foo2(unpack(t))});
+assert(called);
+called = false;
+tcheck(t, {foo2(unpack(t))});
+assert(called);
+called = false;
+foo4();
+assert(called);
+
+debug.sethook(function() {
+  var name, val = debug.getlocal(2, 1);
+  assert(name == "a" && val == null);
+  debug.setlocal(2, 1, "bar");
+  debug.sethook(null);
+}, "c");
+var function foo5(a) {
+  assert(a == "bar");
+}
+foo5();
+

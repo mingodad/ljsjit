@@ -1,0 +1,20 @@
+{ //- self
+  var tr1;
+  function tr1(n) {
+    if( n <= 0 ) { return 0; }
+    return tr1(n-1);
+  }
+  assert(tr1(200) == 0);
+}
+
+{ //- mutual
+  var tr1, tr2;
+  function tr1(n) {
+    if( n <= 0 ) { return 0; }
+    return tr2(n-1);
+  }
+  function tr2(n) {
+    return tr1(n);
+  }
+  assert(tr2(200) == 0);
+}

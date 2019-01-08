@@ -1,0 +1,37 @@
+
+if( ! jit || ! jit.status || ! jit.status() ) { return; }
+
+collectgarbage();
+for( j=1,100 ) {
+  loadstring("for i=1,100 do end")();
+}
+var jutil = require("jit.util");
+assert(jutil.traceinfo(90) == null);
+collectgarbage();
+assert(jutil.traceinfo(1) == null);
+assert(jutil.traceinfo(2) == null);
+assert(jutil.traceinfo(3) == null);
+
+{
+  var f;
+  var function reccb(tr) {
+    if( f == null ) {
+      collectgarbage();
+      var info = jutil.traceinfo(tr);
+      jutil.tracek(tr, -info.nk);
+      // Error in lj_ir_kvalue() if KGC not marked.
+      // Only caught with assertions or Valgrind.
+    }
+  }
+  jit.attach(reccb, "record");
+  for( i=1,200 ) {
+    if( i % 5 == 0 ) {
+      f = function() { };
+    } else if( f ) {
+      f();
+      f = null;
+    }
+  }
+  jit.attach(reccb);
+}
+

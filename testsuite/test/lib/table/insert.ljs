@@ -1,0 +1,17 @@
+var tinsert = table.insert;
+var assert = assert;
+
+{ //- table.insert(t,i)
+  var t = {};
+  for( i=1,100 ) { t[i] = i; }
+  for( i=1,100 ) { tinsert(t, i); }
+  assert(#t == 200 && t[100] == 100 && t[200] == 100);
+}
+
+{ //- table.insert(t,i,i)
+  var t = {};
+  for( i=1,200 ) { t[i] = i; }
+  for( i=101,200 ) { tinsert(t, i, i); }
+  assert(#t == 300 && t[101] == 101 && t[200] == 200 && t[300] == 200);
+}
+

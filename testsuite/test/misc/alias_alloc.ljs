@@ -1,0 +1,54 @@
+
+{
+  var t = {1};
+  var x;
+  for( i=1,100 ) {
+    var v = {i};
+    t[1] = v[1];
+    x = v[1];
+  }
+  assert(x == 100 && t[1] == 100);
+}
+
+{
+  var t = {1};
+  var x,y;
+  for( i=1,100 ) {
+    var v = {i};
+    var w = {i+1};
+    x = v[1];
+    y = w[1];
+  }
+  assert(x == 100 && y == 101);
+}
+
+{
+  var mt = {};
+  var t = setmetatable({}, mt);
+  var x;
+  for( i=1,100 ) {
+    var v = {};
+    setmetatable(v, getmetatable(t));
+    assert(getmetatable(v) == mt);
+  }
+}
+
+// See also sink_alloc.lua
+{
+  var x,k={1,2},{3,4};
+  for( i=1,100 ) { x = {x[1]+k[1], x[2]+k[2]}; }
+  assert(x[1] == 301);
+  assert(x[2] == 402);
+}
+
+// FLOAD for tab.asize/tab.array crossing NEWREF.
+{
+  var t = {1};
+  for( i=1,100 ) {
+    var v = {};
+    var w = {};
+    v[1] = t[1];
+    w[1] = t[1];
+  }
+}
+

@@ -1,0 +1,131 @@
+{ //- rref points into invariant part 1
+  var x,y=1,2; for( i=1,100 ) { x+=y; y=i; }
+  assert(y == 100);
+}
+
+{ //- rref points into invariant part 2
+  var x,y=1,2; for( i=1,100.5 ) { x+=y; y=i; }
+  assert(y == 100);
+}
+
+{ //- rref points into invariant part 3
+  var x,y=1,2; for( i=1,100 ) { x,y=y,x; }
+  assert(x == 1);
+  assert(y == 2);
+}
+
+{ //- rref points into invariant part 4
+  var x,y,z=1,2,3; for( i=1,100 ) { x,y,z=y,z,x; }
+  assert(x == 2);
+  assert(y == 3);
+  assert(z == 1);
+}
+
+{ //- rref points into invariant part 5
+  var x,y,z=1,2,3; for( i=1,100 ) { x,y,z=z,x,y; }
+  assert(x == 3);
+  assert(y == 1);
+  assert(z == 2);
+}
+
+{ //- rref points into invariant part 6
+  var a,x,y,z=0,1,2,3; for( i=1,100 ) { a+=x; x=y; y=z; z=i; }
+  assert(a == 4759);
+  assert(x == 98);
+  assert(y == 99);
+  assert(z == 100);
+}
+
+{ //- variant slot, but no corresponding SLOAD i-1
+  var x,y=1,2; for( i=1,100 ) { x=i; y=i-1; }
+  assert(x == 100);
+  assert(y == 99);
+}
+
+{ //- variant slot, but no corresponding SLOAD i+1
+  var x,y=1,2; for( i=1,100 ) { x=i; y=i+1; }
+  assert(x == 100);
+  assert(y == 101);
+}
+
+{ //- variant slot, but no corresponding SLOAD side exit
+  var x=0; for( i=1,100 ) { if( i==90 ) { break; } x=i; }
+  assert(x == 89);
+}
+
+{ //- dup lref from variant slot (suppressed)
+  var x,y=1,2; for( i=1,100 ) { x=i; y=i; }
+  assert(x == 100);
+  assert(y == 100);
+}
+
+{ //- const rref
+  var x,y=1,2; var bxor,tobit=bit.bxor,bit.tobit;
+  for( i=1,100 ) { x=bxor(i,y); y=tobit(i+1); }
+  assert(x == 0);
+  assert(y == 101);
+}
+
+{ //- dup rref (ok)
+  var x,y,z1,z2=1,2,3,4; var bxor,tobit=bit.bxor,bit.tobit;
+  for( i=1,100 ) { x=bxor(i,y); z2=tobit(i+5); z1=bxor(x,i+5); y=tobit(i+1); }
+  assert(x == 0);
+  assert(y == 101);
+  assert(z1 == 105);
+  assert(z2 == 105);
+}
+
+{ //- variant slot, no corresponding SLOAD
+  for( i=1,5 ) {
+    var a, b = 1, 2;
+    var bits = 0;
+    while( a != b ) {
+      ++bits    ;
+      a = b;
+      b = bit.lshift(b, 1);
+    }
+    assert(bits == 32);
+  }
+}
+
+{ //- don't eliminate PHI if referenced from snapshot
+  var t = { 0 };
+  var a = 0;
+  for( i=1,100 ) {
+    var b = t[1];
+    t[1] = i + a;
+    a = b;
+  }
+  assert(a == 2500);
+  assert(t[1] == 2550);
+}
+
+{ //- don't eliminate PHI if referenced from snapshot
+  var x = 1;
+  var function f() {
+    var t = {};
+    for( i=1,200 ) { t[i] = i; }
+    for( i=1,200 ) {
+      var x1 = x;
+      x = t[i];
+      if( i > 100 ) { return x1; }
+    }
+  }
+  assert(f() == 100);
+}
+
+{ //- don't eliminate PHI if referenced from another non-redundant PHI
+  var t = {};
+  for( i=1,256 ) {
+    var a, b, k = i, math.floor(i/2), -i;
+    while( a > 1 && t[b] > k ) {
+      t[a] = t[b];
+      a = b;
+      b = math.floor(a/2);
+    }
+    t[a] = k;
+  }
+  var x = 0;
+  for( i=1,256 ) { x +=   bit.bxor(i, t[i]); }
+  assert(x == -41704);
+}

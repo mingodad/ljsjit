@@ -1,0 +1,33 @@
+{ //- pass through one
+  assert(assert(true) == true);
+  assert(assert(3) == 3);
+  assert(assert(1.5) == 1.5);
+  assert(assert("x") == "x");
+  var f = function() { };
+  assert(assert(f) == f);
+  var t = {};
+  assert(assert(t) == t);
+}
+
+{ //- pass through many
+  var b, c = assert("b", "c");
+  assert(b == "b");
+  assert(c == "c");
+  var d, e, f, g = assert("d", 5, true, false);
+  assert(d == "d");
+  assert(e == 5);
+  assert(f == true);
+  assert(g == false);
+}
+
+{ //- raise on nil
+  var ok, err = pcall(assert, null);
+  assert(ok == false);
+  assert(err == "assertion failed!");
+}
+
+{ //- raise on false
+  var ok, err = pcall(assert, false, "msg");
+  assert(ok == false);
+  assert(err == "msg");
+}

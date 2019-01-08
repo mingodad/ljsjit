@@ -1,0 +1,155 @@
+var ffi = require("ffi");
+
+{
+  var a = ffi.new("int64_t[?]", 101);
+  for( i=1,100 ) { a[i] = -2; }
+  for( i=1,100 ) { a[i] = i; }
+  var x, y, m = 0ll, 0ll, 0ll;
+  for( i=1,100 ) { x +=   a[i]; y -=   a[i]; m = -a[i]; }
+  assert(x == 5050);
+  assert(y == -5050);
+  assert(m == -100);
+  var z, z0 = 1ll, 3ll;
+  for( i=1,100 ) { z = a[i] * z0; }
+  assert(z == 300);
+  for( i=1,100 ) { z = a[i] * 4ll; } // test MUL -> BSHL rule
+  assert(z == 400);
+  z, z0 = 1ll, 0x123456789abcdef0ll;
+  for( i=1,100 ) { z = z0 / a[i]; }
+  assert(z == 0x123456789abcdef0ll / 100);
+  z, z0 = 1ll, 0x123456789abcdef0ll;
+  for( i=1,100 ) { z = z0 % a[i]; }
+  assert(z == 0x123456789abcdef0ll % 100);
+  // use multiple 64 bit PHIs
+  var t, u, v, w = 0ll, 0ll, 0ll, 0ll;
+  for( i=1,100 ) { t +=   a[i]; u +=   a[i]; v +=   a[i]; w +=   a[i]; }
+  assert(t == 5050);
+  assert(u == 5050);
+  assert(v == 5050);
+  assert(w == 5050);
+}
+
+{
+  var a = ffi.new("uint64_t[?]", 101);
+  for( i=1,100 ) { a[i] = i; }
+  var x, y, m = 0ull, 0ull, 0ull;
+  for( i=1,100 ) { x +=   a[i]; y -=   a[i]; m = -a[i]; }
+  assert(x == 5050);
+  assert(y == 0ull-5050);
+  assert(m == -100ull);
+  var z, z0 = 1ull, 3ll;
+  for( i=1,100 ) { z = a[i] * z0; }
+  assert(z == 300);
+  z, z0 = 1ull, 0x123456789abcdef0ull;
+  for( i=1,100 ) { z = z0 / a[i]; }
+  assert(z == 0x123456789abcdef0ull / 100);
+  z, z0 = 1ull, 0x123456789abcdef0ull;
+  for( i=1,100 ) { z = z0 % a[i]; }
+  assert(z == 0x123456789abcdef0ull % 100);
+}
+
+{
+  var x = 0ll;
+  for( i=1,100 ) { x = x + (-2ll) ** (bit.band(i, 15)+1ll); }
+  assert(x == 262120);
+}
+
+{
+  var x, a = 0ll, -2ll;
+  for( i=1,100 ) { x = x + a ** (bit.band(i, 15)+1ll); }
+  assert(x == 262120);
+}
+
+{
+  var x = 0ull;
+  for( i=1,100 ) { x = x + (-2ll) ** (bit.band(i, 15)+1ull); }
+  assert(x == 262120);
+}
+
+{
+  for( i=1,200 ) { var j = bit.band(i, 7); assert((j == 0ll) == (j == 0)); }
+  for( i=1,200 ) { assert((i < 100ll) == (i < 100)); }
+  for( i=1,200 ) { assert((i <= 100ll) == (i <= 100)); }
+  for( i=-100,100 ) { assert((i > 100ull) == (i < 0)); }
+}
+
+{
+  var a = ffi.new("int64_t[?]", 100);
+  for( i=0,99 ) {
+    a[i] = math.random(0, 2**32)*0x100000000LL + math.random(0, 2**32);
+  }
+  a[92] = 0x10000000LL;
+  a[93] = 0x10000001LL;
+  a[94] = math.random(0, 2**32);
+  a[95] = a[94] + 0x100000000LL;
+  a[96] = a[94] + 0x100000001LL;
+  a[97] = a[20];
+  a[98] = 0;
+  a[99] = -1;
+
+  var function cksum(b) {
+    var bxor, rol = bit.bxor, bit.rol;
+    var x = 0;
+    for( i=0,#b ) { x = rol(bxor(x, (b[i] && i || 0)), 7); }
+    return x;
+  }
+
+  var s = [=[
+    var a, b = ...;
+    var k = 0;
+    for( i=0,99 ) {
+      for( j=0,99 ) {
+	b[k] = a[i] %s a[j];
+	k = k + 1;
+      }
+    }
+  ]=];
+
+  var ap = ffi.new("int64_t *", a);
+  var b = {};
+  for( i=1,2 ) {
+    for( _,cmp in ipairs({ "==", "~=", "<", "<=", ">", ">=" }) ) {
+      var f = assert(loadstring(string.format(s, cmp), "operator"..cmp));
+      f(ap, b);
+      var r1 = cksum(b);
+      jit.off(f);
+      f(ap, b);
+      var r2 = cksum(b);
+      assert(r1 == r2);
+    }
+    ap = ffi.new("uint64_t *", a);
+  }
+}
+
+{
+  var a, b = ffi.new("char *"), ffi.new("char *");
+  var z;
+  for( i=1,100 ) { z = a-b; }
+}
+
+{
+  var x = true;
+  var abc = ffi.cast("const char *", "abc");
+  for( i=1,100 ) { x = abc == "abc"; }
+  assert(x == true);
+  for( i=1,100 ) { x = abc == "xyz"; }
+  assert(x == false);
+  for( i=1,100 ) { x = 0LL == ""; }
+  assert(x == false);
+  for( i=1,100 ) { x = 0LL == false; }
+  assert(x == false);
+  for( i=1,100 ) { x = 0LL == null; }
+  assert(x == false);
+}
+
+// ra_destpair
+{
+  var x, y = 0, 0;
+  for( i=1,100 ) {
+    x = x + i/3LL;
+    y = y + i/5LL;
+  }
+  assert(x == 1650);
+  assert(y == 970);
+}
+

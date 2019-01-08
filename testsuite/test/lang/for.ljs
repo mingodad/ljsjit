@@ -1,0 +1,45 @@
+{ //- direction
+  var a,b,c = 10,1,-1;
+  for( i=1,20 ) {
+    if( c == -1 ) {
+      a,b,c = 1,10,1;
+    } else {
+      a,b,c = 10,1,-1;
+    }
+    var x = 0;
+    for( i=a,b,c ) { for( j=1,10 ) { } ++x; }
+    assert(x == 10);
+  }
+}
+
+{ //- coerce to integer at 13
+  var n = 1;
+  var x = 0;
+  for( i=1,20 ) {
+    for( j=n,100 ) { ++x    ; }
+    if( i == 13 ) { n = "2"; }
+  }
+  assert(x == 1993);
+}
+
+{ //- coerce to integer at 10
+  var n = 1;
+  var x = 0;
+  for( i=1,20 ) {
+    for( j=n,100 ) { ++x    ; }
+    if( i == 10 ) { n = "2"; }
+  }
+  assert(x == 1990);
+}
+
+{ //- cannot coerce to integer at 10
+  var function f() {
+    var n = 1;
+    var x = 0;
+    for( i=1,20 ) {
+      for( j=n,100 ) { ++x    ; }
+      if( i == 10 ) { n = "x"; }
+    }
+  }
+  assert(! pcall(f));
+}

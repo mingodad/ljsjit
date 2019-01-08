@@ -1,0 +1,6 @@
+lang
+lib +compat5.2
+bc +luajit>=2
+computations.ljs
+trace +jit
+opt +jit

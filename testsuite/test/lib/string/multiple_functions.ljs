@@ -1,0 +1,16 @@
+{ //- string_op
+  var t, y = {}, {};
+  for( i=1,100 ) { t[i] = string.char(i, 16+i, 32+i); }
+  for( i=1,100 ) { t[i] = string.reverse(t[i]); }
+  assert(t[100] == "\132\116\100");
+  for( i=1,100 ) { t[i] = string.reverse(t[i]); }
+  for( i=1,100 ) { assert(t[i] == string.char(i, 16+i, 32+i)); }
+  for( i=1,100 ) { y[i] = string.upper(t[i]); }
+  assert(y[65] == "AQA");
+  assert(y[97] == "AQ\129");
+  assert(y[100] == "DT\132");
+  for( i=1,100 ) { y[i] = string.lower(t[i]); }
+  assert(y[65] == "aqa");
+  assert(y[97] == "aq\129");
+  assert(y[100] == "dt\132");
+}

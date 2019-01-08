@@ -1,0 +1,50 @@
+{ //- 1. Open upvalue above base slot, aliasing an SSA value.
+  var x = 7;
+  var function a() { ++x    ; }
+  var function b() { x +=   2; }
+  for( i=1,100 ) { a(); b(); x +=   5; }
+  assert(x == 807);
+}
+
+{ //- 2. Open upvalue below base slot. UREFO CSE for a.x + b.x, but not x in loop.
+    //    ULOAD not disambiguated. 2x ULOAD + 2x USTORE (+ 1x DSE USTORE).
+  var x = 7;
+  (function() {
+    var function a() { ++x    ; }
+    var function b() { x +=   2; }
+    for( i=1,100 ) { a(); b(); x +=   5; }
+  })();
+  assert(x == 807);
+}
+
+{ //- 3. Closed upvalue. UREFC CSE for a.x + b.x, but not x in loop.
+    //    ULOAD not disambiguated. 2x ULOAD + 2x USTORE (+ 1x DSE for USTORE).
+  var xx = (function() {
+    var x = 7;
+    var function a() { ++x    ; }
+    var function b() { x +=   2; }
+    return function() { for( i=1,100 ) { a(); b(); x +=   5; }; return x; };
+  })()();
+  assert(xx == 807);
+}
+
+{ //- 4. Open upvalue below base slot. Forwarded. 1x USTORE (+ 1x DSE USTORE).
+  var x = 7;
+  (function() {
+    var function a() { ++x    ; }
+    for( i=1,100 ) { a(); a(); }
+  })();
+  assert(x == 207);
+}
+
+{ //- 5. Closed upvalue. Forwarded. 1x USTORE (+ 1x DSE USTORE).
+  var xx = (function() {
+    var x = 7;
+    return function() {
+      var function a() { ++x    ; }
+      for( i=1,100 ) { a(); a(); }
+      return x;
+    };
+  })()();
+  assert(xx == 207);
+}

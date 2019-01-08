@@ -1,0 +1,13 @@
+
+var a,b,c = 10,1,-1;
+for( i=1,20 ) {
+  if( c == -1 ) {
+    a,b,c = 1,10,1;
+  } else {
+    a,b,c = 10,1,-1;
+  }
+  var x = 0;
+  for( i=a,b,c ) { for( j=1,10 ) { } ++x; }
+  assert(x == 10);
+}
+

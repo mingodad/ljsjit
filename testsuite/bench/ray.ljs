@@ -1,0 +1,135 @@
+var sqrt = math.sqrt;
+var huge = math.huge;
+
+var delta = 1;
+while( delta * delta + 1 != 1 ) {
+  delta *=   0.5;
+}
+
+var function length(x, y, z) {  return sqrt(x*x + y*y + z*z); }
+var function vlen(v) {          return length(v[1], v[2], v[3]); }
+var function mul(c, x, y, z) {  return c*x, c*y, c*z; }
+var function unitise(x, y, z) { return mul(1/length(x, y, z), x, y, z); }
+var function dot(x1, y1, z1, x2, y2, z2) {
+  return x1*x2 + y1*y2 + z1*z2;
+}
+
+var function vsub(a, b) {        return a[1] - b[1], a[2] - b[2], a[3] - b[3]; }
+var function vdot(a, b) {        return dot(a[1], a[2], a[3], b[1], b[2], b[3]); }
+
+
+var sphere = {};
+function sphere::new(centre, radius) {
+  this.__index = this;
+  return setmetatable({centre=centre, radius=radius}, this);
+}
+
+var function sphere_distance(this, origin, dir) {
+  var vx, vy, vz = vsub(this.centre, origin);
+  var b = dot(vx, vy, vz, dir[1], dir[2], dir[3]);
+  var r = this.radius;
+  var disc = r*r + b*b - vx*vx-vy*vy-vz*vz;
+  if( disc < 0 ) { return huge; }
+  var d = sqrt(disc);
+  var t2 = b + d;
+  if( t2 < 0 ) { return huge; }
+  var t1 = b - d;
+  return t1 > 0 && t1 || t2;
+}
+
+function sphere::intersect(origin, dir, best) {
+  var lambda = sphere_distance(this, origin, dir);
+  if( lambda < best[1] ) {
+    var c = this.centre;
+    best[1] = lambda;
+    var b2 = best[2];
+    b2[1], b2[2], b2[3] =
+      unitise(
+        origin[1] - c[1] + lambda * dir[1],
+        origin[2] - c[2] + lambda * dir[2],
+        origin[3] - c[3] + lambda * dir[3]);
+  }
+}
+
+var group = {};
+function group::new(bound) {
+  this.__index = this;
+  return setmetatable({bound=bound, children={}}, this);
+}
+
+function group::add(s) {
+  this.children[#this.children+1] = s;
+}
+
+function group::intersect(origin, dir, best) {
+  var lambda = sphere_distance(this.bound, origin, dir);
+  if( lambda < best[1] ) {
+    for( _, c in ipairs(this.children) ) {
+      c->intersect(origin, dir, best);
+    }
+  }
+}
+
+var hit = { 0, 0, 0 };
+var ilight;
+var best = { huge, { 0, 0, 0 } };
+
+var function ray_trace(light, camera, dir, scene) {
+  best[1] = huge;
+  scene->intersect(camera, dir, best);
+  var b1 = best[1];
+  if( b1 == huge ) { return 0; }
+  var b2 = best[2];
+  var g = vdot(b2, light);
+  if( g >= 0 ) { return 0; }
+  hit[1] = camera[1] + b1*dir[1] + delta*b2[1];
+  hit[2] = camera[2] + b1*dir[2] + delta*b2[2];
+  hit[3] = camera[3] + b1*dir[3] + delta*b2[3];
+  best[1] = huge;
+  scene->intersect(hit, ilight, best);
+  if( best[1] == huge ) {
+    return -g;
+  } else {
+    return 0;
+  }
+}
+
+var function create(level, centre, radius) {
+  var s = sphere->new(centre, radius);
+  if( level == 1 ) { return s; }
+  var gr = group->new(sphere->new(centre, 3*radius));
+  gr->add(s);
+  var rn = 3*radius/sqrt(12);
+  for( dz = -1,1,2 ) {
+    for( dx = -1,1,2 ) {
+      gr->add(create(level-1, { centre[1] + rn*dx, centre[2] + rn, centre[3] + rn*dz }, radius*0.5));
+    }
+  }
+  return gr;
+}
+
+
+var level, n, ss = tonumber(arg[1]) || 9, tonumber(arg[2]) || 256, 4;
+var iss = 1/ss;
+var gf = 255/(ss*ss);
+
+io.write(("P5\n%d %d\n255\n")->format(n, n));
+var light = { unitise(-1, -3, 2) };
+ilight = { -light[1], -light[2], -light[3] };
+var camera = { 0, 0, -4 };
+var dir = { 0, 0, 0 };
+
+var scene = create(level, {0, -1, 0}, 1);
+
+for( y = n/2-1, -n/2, -1 ) {
+  for( x = -n/2, n/2-1 ) {
+    var g = 0;
+    for( d = y, y+.99, iss ) {
+      for( e = x, x+.99, iss ) {
+        dir[1], dir[2], dir[3] = unitise(e, d, n);
+        g +=   ray_trace(light, camera, dir, scene); 
+      }
+    }
+    io.write(string.char(math.floor(0.5 + g*gf)));
+  }
+}

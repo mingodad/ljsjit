@@ -1,0 +1,29 @@
+
+{
+  var function sum(n) {
+    if( n == 1 ) { return 1; }
+    return n + sum(n-1);
+  }
+  assert(sum(200) == 20100);
+}
+
+{
+  var pcall = pcall;
+  var tr1;
+  var x = 0;
+  function tr1(n) {
+    if( n <= 0 ) { return; }
+    ++x    ;
+    return pcall(tr1, n-1);
+  }
+  assert(tr1(200) == true && x == 200);
+}
+
+{
+  var function fib(n) {
+    if( n < 2 ) { return 1; }
+    return fib(n-2) + fib(n-1);
+  }
+  assert(fib(15) == 987);
+}
+

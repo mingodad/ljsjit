@@ -1,0 +1,22 @@
+// DSE of USTORE must eliminate OBAR, too.
+
+if( jit && jit.opt ) { pcall(jit.opt.start, "-sink"); }
+
+var f;
+{
+  var x;
+  f = function() {
+    var y = 0;
+    for( i=1,10000 ) {
+      x = {1};
+      if( y > 0 ) { }
+      x = 1;
+    }
+  };
+}
+
+collectgarbage();
+collectgarbage("setstepmul", 1);
+collectgarbage("restart");
+f();
+

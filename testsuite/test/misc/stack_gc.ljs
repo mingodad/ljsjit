@@ -1,0 +1,15 @@
+
+{
+  var t = setmetatable({}, { __index=function(t, k) {
+    --k    ;
+    if( k == 0 ) {
+      collectgarbage(); // Mark stack, including holes.
+      return 0;
+    } else {
+      return t[k]; // Leaves holes in each frame.
+    }
+    { var a,b,c,d,e,f,g,h,i,j,xk,l,m,n; } // Ensure bigger frame size.
+  }});
+  var x = t[50];
+}
+

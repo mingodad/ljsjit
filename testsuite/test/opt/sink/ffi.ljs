@@ -1,0 +1,121 @@
+var ffi = require("ffi");
+
+{ //- incrementing
+  var x = 10000000000000ll;
+  for( i=1,100 ) { ++x; }
+  assert(x == 10000000000100ll);
+}
+
+{ //- hoistable increment !private_G
+  var x = 10000000000000ll;
+  var z;
+  for( i=1,100 ) { z=x+1; }
+  assert(z == 10000000000001ll);
+  for( i=1,100 ) { var y=x; z=x+1; g=y; }
+  assert(z == 10000000000001ll);
+  assert(g == 10000000000000ll);
+}
+
+{ //- escaping hoistable increment
+  var x = 10000000000000ll;
+  for( i=1,100 ) { var y=x+1; if( i == 90 ) { x=y; } }
+  assert(x == 10000000000001ll);
+}
+
+{ //- escaping addition
+  var x = 10000000000000ll;
+  for( i=1,100 ) { var y=x+i; if( i == 90 ) { x=y; } }
+  assert(x == 10000000000090ll);
+}
+
+{ //- conditional addition / incrementing
+  var x = 10000000000000ll;
+  for( i=1,200 ) { var y=x+i; if( i > 100 ) { x=y; } }
+  assert(x == 10000000015050ll);
+}
+
+{ //- incrementing pointer
+  var a = ffi.new("int[?]", 100);
+  var p = a;
+  for( i=0,99 ) { p[0]=i; ++p; }
+  assert(p == a+100);
+  for( i=0,99 ) { assert(a[i] == i); }
+}
+
+{ //- mutating complex
+  var cx = ffi.typeof("complex");
+  var x = cx(1, 2);
+  var k = cx(3, 4);
+  for( i=1,100 ) { x = cx(x.re+k.re, x.im+k.im); }
+  assert(x.re == 301);
+  assert(x.im == 402);
+}
+
+{ //- mutating struct
+  var st = ffi.typeof("struct { int a; int64_t b; double c; }");
+  var x = st(1, 20000000000LL, 3.5);
+  var k = st(3, 4, 5.0);
+  for( i=1,100 ) { x = st(x.a+k.a, x.b+k.b, x.c+k.c); }
+  assert(x.a == 301);
+  assert(x.b == 20000000400LL);
+  assert(x.c == 503.5);
+  var y, z;
+  for( i=1,100 ) {
+    var xx = st(i, i, i);
+    if( i == 90 ) { y = st(xx.a, xx.b, xx.c); }
+    xx.b = xx.b + 20000000000LL;
+    if( i == 95 ) { z = st(xx.a, xx.b, xx.c); }
+  }
+  assert(y.a == 90);
+  assert(y.b == 90);
+  assert(y.c == 90);
+  assert(z.a == 95);
+  assert(z.b == 20000000095LL);
+  assert(z.c == 95);
+  for( i=1,200 ) {
+    var xx = st(i, i, i);
+    if( i > 100 ) { y = st(xx.a, xx.b, xx.c); }
+    xx.b = xx.b + 20000000000LL;
+    if( i > 150 ) { z = st(xx.a, xx.b, xx.c); }
+  }
+  assert(y.a == 200);
+  assert(y.b == 200);
+  assert(y.c == 200);
+  assert(z.a == 200);
+  assert(z.b == 20000000200LL);
+  assert(z.c == 200);
+}
+
+{ //- mutating struct 2
+  var st = ffi.typeof("struct { int64_t a; double b; float c; }");
+  var x = st(1, 2.5, 3.25);
+  var k = st(3, 4, 5);
+  for( i=1,100 ) { x = st(x.a+k.a, x.b+k.b, x.c+k.c); }
+  assert(x.a == 301);
+  assert(x.b == 402.5);
+  assert(x.c == 503.25);
+}
+
+{ //- escaping loop counter to float
+  var st = ffi.typeof("struct { float a; }");
+  var x;
+  for( i=1,200 ) {
+    var y = st(i);
+    if( i > 100 ) { x = y; }
+  }
+  assert(x.a == 200);
+}
+
+{ //- 64 bit crash bug !private_G
+  var t = {};
+  for( i=1,200 ) { t[i] = "abcd"; }
+  var r;
+  for( i=1,200 ) {
+    var a,b,c,d;
+    var g = t[201-i];                                // Non-zero stack slot above.
+    var v = ffi.cast("const char *", t[i]);          // Uses 32 bit stack slot!
+    a,b,c,d = {v[0]},{v[1]},{v[2]},{v[3]};             // Force above to spill.
+    r = {{i}};                                         // Spill due to call.
+    if( i > 100 ) { z = v[0]+a[1]+b[1]+c[1]+d[1]; }  // Crash for 64 bit ptr v.
+  }
+}

@@ -1,0 +1,50 @@
+
+var function fannkuch(n) {
+  var p, q, s, odd, check, maxflips = {}, {}, {}, true, 0, 0;
+  for( i=1,n ) { p[i] = i; q[i] = i; s[i] = i; }
+  do {
+    // Print max. 30 permutations.
+    if( check < 30 ) {
+      if( ! p[n] ) { return maxflips; }	// Catch n = 0, 1, 2.
+      io.write(unpack(p)); io.write("\n");
+      ++check    ;
+    }
+    // Copy and flip.
+    var q1 = p[1];				// Cache 1st element.
+    if( p[n] != n && q1 != 1 ) {		// Avoid useless work.
+      for( i=2,n ) { q[i] = p[i]; }		// Work on a copy.
+      var flips = 1;			// Flip ...
+      while( true ) {
+	var qq = q[q1];
+	if( qq == 1 ) {				// ... until 1st element is 1.
+	  if( flips > maxflips ) { maxflips = flips; } // New maximum?
+	  break;
+	}
+	q[q1] = q1;
+	if( q1 >= 4 ) {
+	  var i, j = 2, q1 - 1;
+	  do { q[i], q[j] = q[j], q[i]; ++i    ; --j    ; } while(!( i >= j) );
+	}
+	q1 = qq;
+	++flips;
+      }
+    }
+    // Permute.
+    if( odd ) {
+      p[2], p[1] = p[1], p[2]; odd = false;	// Rotate 1<-2.
+    } else {
+      p[2], p[3] = p[3], p[2]; odd = true;	// Rotate 1<-2 and 1<-2<-3.
+      for( i=3,n ) {
+	var sx = s[i];
+	if( sx != 1 ) { s[i] = sx-1; break; }
+	if( i == n ) { return maxflips; }	// Out of permutations.
+	s[i] = i;
+	// Rotate 1<-...<-i+1.
+	var t=p[1]; for( j=i+1,1,-1 ) { p[j],t=t,p[j]; }
+      }
+    }
+  } while(!( false) );
+}
+
+var n = tonumber(arg && arg[1]) || 1;
+io.write("Pfannkuchen(", n, ") = ", fannkuch(n), "\n");

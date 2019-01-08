@@ -1,0 +1,22 @@
+
+var bit = require("bit");
+var bnot, bor, band = bit.bnot, bit.bor, bit.band;
+var shl, shr = bit.lshift, bit.rshift;
+
+var N = tonumber(arg && arg[1]) || 10000000;
+var cache, m, n = { 1 }, 1, 1;
+if( arg && arg[2] ) { cache = null; }
+for( i=2,N ) {
+  var j = i;
+  for( len=1,1000000000 ) {
+    j = bor(band(shr(j,1), band(j,1)-1), band(shl(j,1)+j+1, bnot(band(j,1)-1)));
+    if( cache ) {
+      var x = cache[j]; if( x ) { j = x+len; break; }
+    } else if( j == 1 ) {
+      j = len+1; break;
+    }
+  }
+  if( cache ) { cache[i] = j; }
+  if( j > m ) { m, n = j, i; }
+}
+io.write("Found ", n, " (chain length: ", m, ")\n");
