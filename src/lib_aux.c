@@ -290,8 +290,7 @@ LUALIB_API int luaL_ref(lua_State *L, int t)
     lua_rawgeti(L, t, ref);  /* remove it from list */
     lua_rawseti(L, t, FREELIST_REF);  /* (t[FREELIST_REF] = t[ref]) */
   } else {  /* no free elements */
-    ref = (int)lua_objlen(L, t);
-    ref++;  /* create new reference */
+    ref = (int)lua_objlen(L, t) + LUA_INDEX_BASE; /* create new reference */
   }
   lua_rawseti(L, t, ref);
   return ref;
