@@ -3779,8 +3779,8 @@ luaX_newstring(ls,getstr(ts),ts->tsv.len);
 static void parser_warning(LexState*ls,const char*msg){
 char buff[80];
 luaO_chunkid(buff,getstr(ls->source),80);
-msg=luaO_pushfstring(ls->L,"%s:%d: %s",buff,ls->linenumber,msg);
-fprintf(stderr,"warning %s\n",msg);
+msg=luaO_pushfstring(ls->L,"%s:%d: warning %s",buff,ls->linenumber,msg);
+fprintf(stderr,"%s\n",msg);
 fflush(stderr);
 }
 static void error_expected(LexState*ls,int token){
@@ -6448,8 +6448,17 @@ adjuststack(B);
 return B->buffer;
 }
 static void luaL_addlstring(luaL_Buffer*B,const char*s,size_t l){
-while(l--)
-luaL_addchar(B,*s++);
+lua_State*L=B->L;
+if(l<=bufffree(B)){
+memcpy(B->p,s,l);
+B->p+=l;
+}
+else{
+emptybuffer(B);
+lua_pushlstring(L,s,l);
+B->lvl++;
+adjuststack(B);
+}
 }
 static void luaL_pushresult(luaL_Buffer*B){
 emptybuffer(B);
