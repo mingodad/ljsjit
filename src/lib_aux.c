@@ -177,49 +177,82 @@ LUALIB_API const char *luaL_gsub(lua_State *L, const char *s,
 
 /* -- Buffer handling ----------------------------------------------------- */
 
-#define bufflen(B)	((size_t)((B)->p - (B)->buffer))
-#define bufffree(B)	((size_t)(LUAL_BUFFERSIZE - bufflen(B)))
+/* userdata to box arbitrary data */
+typedef struct UBox {
+  void *box;
+  size_t bsize;
+} UBox;
 
-static int emptybuffer(luaL_Buffer *B)
-{
-  size_t l = bufflen(B);
-  if (l == 0)
-    return 0;  /* put nothing on stack */
-  lua_pushlstring(B->L, B->buffer, l);
-  B->p = B->buffer;
-  B->lvl++;
-  return 1;
-}
-
-static void adjuststack(luaL_Buffer *B)
-{
-  if (B->lvl > 1) {
-    lua_State *L = B->L;
-    int toget = 1;  /* number of levels to concat */
-    size_t toplen = lua_strlen(L, -1);
-    do {
-      size_t l = lua_strlen(L, -(toget+1));
-      if (!(B->lvl - toget + 1 >= LUA_MINSTACK/2 || toplen > l))
-	break;
-      toplen += l;
-      toget++;
-    } while (toget < B->lvl);
-    lua_concat(L, toget);
-    B->lvl = B->lvl - toget + 1;
+static void *resizebox (lua_State *L, int idx, size_t newsize) {
+  void *ud;
+  lua_Alloc allocf = lua_getallocf(L, &ud);
+  UBox *box = (UBox *)lua_touserdata(L, idx);
+  void *temp = allocf(ud, box->box, box->bsize, newsize);
+  if (temp == NULL && newsize > 0) {  /* allocation error? */
+    resizebox(L, idx, 0);  /* free buffer */
+    luaL_error(L, "not enough memory for buffer allocation");
   }
+  box->box = temp;
+  box->bsize = newsize;
+  return temp;
 }
 
-LUALIB_API char *luaL_prepbuffer(luaL_Buffer *B)
-{
-  if (emptybuffer(B))
-    adjuststack(B);
-  return B->buffer;
+static int boxgc (lua_State *L) {
+  resizebox(L, 1, 0);
+  return 0;
 }
 
-LUALIB_API void luaL_addlstring(luaL_Buffer *B, const char *s, size_t l)
-{
-  while (l--)
-    luaL_addchar(B, *s++);
+
+static void *newbox (lua_State *L, size_t newsize) {
+  UBox *box = (UBox *)lua_newuserdata(L, sizeof(UBox));
+  box->box = NULL;
+  box->bsize = 0;
+  if (luaL_newmetatable(L, "LUABOX")) {  /* creating metatable? */
+    lua_pushcfunction(L, boxgc);
+    lua_setfield(L, -2, "__gc");  /* metatable.__gc = boxgc */
+  }
+  lua_setmetatable(L, -2);
+  return resizebox(L, -1, newsize);
+}
+
+/*
+** check whether buffer is using a userdata on the stack as a temporary
+** buffer
+*/
+#define buffonstack(B)	((B)->b != (B)->initb)
+
+
+/*
+** returns a pointer to a free area with at least 'sz' bytes
+*/
+LUALIB_API char *luaL_prepbuffsize (luaL_Buffer *B, size_t sz) {
+  lua_State *L = B->L;
+  if (B->size - B->n < sz) {  /* not enough space? */
+    char *newbuff;
+    size_t newsize = B->size * 2;  /* double buffer size */
+    if (newsize - B->n < sz)  /* not big enough? */
+      newsize = B->n + sz;
+    if (newsize < B->n || newsize - B->n < sz)
+      luaL_error(L, "buffer too large");
+    /* create larger buffer */
+    if (buffonstack(B))
+      newbuff = (char *)resizebox(L, -1, newsize);
+    else {  /* no buffer yet */
+      newbuff = (char *)newbox(L, newsize);
+      memcpy(newbuff, B->b, B->n * sizeof(char));  /* copy original content */
+    }
+    B->b = newbuff;
+    B->size = newsize;
+  }
+  return &B->b[B->n];
+}
+
+LUALIB_API void luaL_addlstring (luaL_Buffer *B, const char *s, size_t l) {
+  if (l > 0) {  /* avoid 'memcpy' when 's' can be NULL */
+    char *b = luaL_prepbuffsize(B, l);
+    memcpy(b, s, l * sizeof(char));
+    luaL_addsize(B, l);
+  }
 }
 
 LUALIB_API void luaL_addstring(luaL_Buffer *B, const char *s)
@@ -227,35 +260,30 @@ LUALIB_API void luaL_addstring(luaL_Buffer *B, const char *s)
   luaL_addlstring(B, s, strlen(s));
 }
 
-LUALIB_API void luaL_pushresult(luaL_Buffer *B)
-{
-  emptybuffer(B);
-  lua_concat(B->L, B->lvl);
-  B->lvl = 1;
-}
-
-LUALIB_API void luaL_addvalue(luaL_Buffer *B)
-{
+LUALIB_API void luaL_pushresult (luaL_Buffer *B) {
   lua_State *L = B->L;
-  size_t vl;
-  const char *s = lua_tolstring(L, -1, &vl);
-  if (vl <= bufffree(B)) {  /* fit into buffer? */
-    memcpy(B->p, s, vl);  /* put it there */
-    B->p += vl;
-    lua_pop(L, 1);  /* remove from stack */
-  } else {
-    if (emptybuffer(B))
-      lua_insert(L, -2);  /* put buffer before new value */
-    B->lvl++;  /* add new value into B stack */
-    adjuststack(B);
+  lua_pushlstring(L, B->b, B->n);
+  if (buffonstack(B)) {
+    resizebox(L, -2, 0);  /* delete old buffer */
+    lua_remove(L, -2);  /* remove its header from the stack */
   }
 }
 
-LUALIB_API void luaL_buffinit(lua_State *L, luaL_Buffer *B)
-{
+LUALIB_API void luaL_addvalue (luaL_Buffer *B) {
+  lua_State *L = B->L;
+  size_t l;
+  const char *s = lua_tolstring(L, -1, &l);
+  if (buffonstack(B))
+    lua_insert(L, -2);  /* put value below buffer */
+  luaL_addlstring(B, s, l);
+  lua_remove(L, (buffonstack(B)) ? -2 : -1);  /* remove value */
+}
+
+LUALIB_API void luaL_buffinit (lua_State *L, luaL_Buffer *B) {
   B->L = L;
-  B->p = B->buffer;
-  B->lvl = 0;
+  B->b = B->initb;
+  B->n = 0;
+  B->size = LUAL_BUFFERSIZE;
 }
 
 /* -- Reference management ------------------------------------------------ */
@@ -281,8 +309,7 @@ LUALIB_API int luaL_ref(lua_State *L, int t)
     lua_rawgeti(L, t, ref);  /* remove it from list */
     lua_rawseti(L, t, FREELIST_REF);  /* (t[FREELIST_REF] = t[ref]) */
   } else {  /* no free elements */
-    ref = (int)lua_objlen(L, t);
-    ref++;  /* create new reference */
+    ref = (int)lua_objlen(L, t) + LUA_INDEX_BASE; /* create new reference */
   }
   lua_rawseti(L, t, ref);
   return ref;

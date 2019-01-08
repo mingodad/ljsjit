@@ -42,13 +42,13 @@ LJLIB_ASM(string_byte)		LJLIB_REC(string_range 0)
 {
   GCstr *s = lj_lib_checkstr(L, 1);
   int32_t len = (int32_t)s->len;
-  int32_t start = lj_lib_optint(L, 2, 1);
+  int32_t start = lj_lib_optint(L, 2, LUA_INDEX_BASE);
   int32_t stop = lj_lib_optint(L, 3, start);
   int32_t n, i;
   const unsigned char *p;
   if (stop < 0) stop += len+1;
   if (start < 0) start += len+1;
-  if (start <= 0) start = 1;
+  if (start <= 0) start = LUA_INDEX_BASE;
   if (stop > len) stop = len;
   if (start > stop) return FFH_RES(0);  /* Empty interval: return no results. */
   start--;
@@ -451,7 +451,7 @@ static int str_find_aux(lua_State *L, int find)
 {
   GCstr *s = lj_lib_checkstr(L, 1);
   GCstr *p = lj_lib_checkstr(L, 2);
-  int32_t start = lj_lib_optint(L, 3, 1);
+  int32_t start = lj_lib_optint(L, 3, LUA_INDEX_BASE);
   MSize st;
   if (start < 0) start += (int32_t)s->len; else start--;
   if (start < 0) start = 0;
@@ -468,7 +468,7 @@ static int str_find_aux(lua_State *L, int find)
 	       !lj_str_haspattern(p))) {  /* Search for fixed string. */
     const char *q = lj_str_find(strdata(s)+st, strdata(p), s->len-st, p->len);
     if (q) {
-      setintV(L->top-2, (int32_t)(q-strdata(s)) + 1);
+      setintV(L->top-2, (int32_t)(q-strdata(s)) + LUA_INDEX_BASE);
       setintV(L->top-1, (int32_t)(q-strdata(s)) + (int32_t)p->len);
       return 2;
     }
