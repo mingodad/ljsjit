@@ -133,26 +133,23 @@ LUALIB_API void (luaL_setmetatable) (lua_State *L, const char *tname);
 
 
 typedef struct luaL_Buffer {
-  char *b;  /* buffer address */
-  size_t size;  /* buffer size */
-  size_t n;  /* number of characters in buffer */
+  char *p;			/* current position in buffer */
+  int lvl;  /* number of strings in the stack (level) */
   lua_State *L;
-  char initb[LUAL_BUFFERSIZE];
+  char buffer[LUAL_BUFFERSIZE];
 } luaL_Buffer;
 
 #define luaL_addchar(B,c) \
-  ((void)((B)->n < (B)->size || luaL_prepbuffsize((B), 1)), \
-   ((B)->b[(B)->n++] = (c)))
-
-#define luaL_addsize(B,s)	((B)->n += (s))
+  ((void)((B)->p < ((B)->buffer+LUAL_BUFFERSIZE) || luaL_prepbuffer(B)), \
+   (*(B)->p++ = (char)(c)))
 
 /* compatibility only */
 #define luaL_putchar(B,c)	luaL_addchar(B,c)
 
+#define luaL_addsize(B,n)	((B)->p += (n))
 
 LUALIB_API void (luaL_buffinit) (lua_State *L, luaL_Buffer *B);
-LUALIB_API char *(luaL_prepbuffsize) (luaL_Buffer *B, size_t sz);
-/*LUALIB_API char *(luaL_prepbuffer) (luaL_Buffer *B);*/
+LUALIB_API char *(luaL_prepbuffer) (luaL_Buffer *B);
 LUALIB_API void (luaL_addlstring) (luaL_Buffer *B, const char *s, size_t l);
 LUALIB_API void (luaL_addstring) (luaL_Buffer *B, const char *s);
 LUALIB_API void (luaL_addvalue) (luaL_Buffer *B);

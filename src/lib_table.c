@@ -79,7 +79,7 @@ LJLIB_CF(table_maxn)
 LJLIB_CF(table_insert)		LJLIB_REC(.)
 {
   GCtab *t = lj_lib_checktab(L, 1);
-  int32_t n, i = (int32_t)lj_tab_len(t) + LUA_INDEX_BASE;
+  int32_t n, i = (int32_t)lj_tab_len(t) + 1;
   int nargs = (int)((char *)L->top - (char *)L->base);
   if (nargs != 2*sizeof(TValue)) {
     if (nargs != 3*sizeof(TValue))
@@ -153,7 +153,7 @@ LJLIB_CF(table_concat)		LJLIB_REC(.)
 {
   GCtab *t = lj_lib_checktab(L, 1);
   GCstr *sep = lj_lib_optstr(L, 2);
-  int32_t i = lj_lib_optint(L, 3, LUA_INDEX_BASE);
+  int32_t i = lj_lib_optint(L, 3, 1);
   int32_t e = (L->base+3 < L->top && !tvisnil(L->base+3)) ?
 	      lj_lib_checkint(L, 4) : (int32_t)lj_tab_len(t);
   SBuf *sb = lj_buf_tmp_(L);
@@ -263,7 +263,7 @@ LJLIB_CF(table_sort)
   lua_settop(L, 2);
   if (!tvisnil(L->base+1))
     lj_lib_checkfunc(L, 2);
-  auxsort(L, LUA_INDEX_BASE, n);
+  auxsort(L, 1, n);
   return 0;
 }
 

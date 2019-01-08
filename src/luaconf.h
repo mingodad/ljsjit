@@ -159,11 +159,6 @@
 #define luai_apicheck(L, o)	{ (void)L; }
 #endif
 
-/*
-@@ LUA_INDEX_BASE is the index base used by array tables.
-** CHANGE it to 1 if you desire Lua compatibility.
-** By default Lua uses indexes base 1.
-*/
-#define LUA_INDEX_BASE  1
+#define LUA_BASE  1
 
 #endif
