@@ -1724,10 +1724,9 @@ op_template = function(params, template, nparams) {
     } else if( p == "M" ) {
       op +=   parse_shiftmask(params[n], false); n +=   1;
     } else if( p == "J" || p == "K" ) {
-      var mode, s;
-      mode, n, s = parse_label(params[n], false);  //DADBUG
-      if( p == "K" ) { n +=   2048; }
-      waction("REL_"..mode, n, s, 1);
+      var mode, m, s = parse_label(params[n], false);
+      if( p == "K" ) { m +=   2048; }
+      waction("REL_"..mode, m, s, 1);
       n +=   1;
     } else if( p == "0" ) {
       if( band(shr(op, rs), 31) == 0 ) { werror("cannot use r0"); }
