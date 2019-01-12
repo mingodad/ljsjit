@@ -218,15 +218,13 @@ LUALIB_API char *luaL_prepbuffer(luaL_Buffer *B)
 
 LUALIB_API void luaL_addlstring(luaL_Buffer *B, const char *s, size_t l)
 {
-  lua_State *L = B->L;
-  if (l <= bufffree(B)) {  /* fit into buffer? */
-    memcpy(B->p, s, l);  /* put it there */
+  if (l <= bufffree(B)) {
+    memcpy(B->p, s, l);
     B->p += l;
-  }
-  else {
+  } else {
     emptybuffer(B);
-    lua_pushlstring(L, s, l);
-    B->lvl++;  /* add new value into B stack */
+    lua_pushlstring(B->L, s, l);
+    B->lvl++;
     adjuststack(B);
   }
 }
@@ -290,7 +288,8 @@ LUALIB_API int luaL_ref(lua_State *L, int t)
     lua_rawgeti(L, t, ref);  /* remove it from list */
     lua_rawseti(L, t, FREELIST_REF);  /* (t[FREELIST_REF] = t[ref]) */
   } else {  /* no free elements */
-    ref = (int)lua_objlen(L, t) + LUA_INDEX_BASE; /* create new reference */
+    ref = (int)lua_objlen(L, t);
+    ref++;  /* create new reference */
   }
   lua_rawseti(L, t, ref);
   return ref;
