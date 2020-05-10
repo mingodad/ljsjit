@@ -7,7 +7,7 @@
       a,b,c = 10,1,-1;
     }
     var x = 0;
-    for( i=a,b,c ) { for( j=1,10 ) { } ++x; }
+    for( i2=a,b,c ) { for( j=1,10 ) { } ++x; }
     assert(x == 10);
   }
 }

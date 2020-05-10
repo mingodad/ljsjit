@@ -2,7 +2,7 @@
 ** FOLD: Constant Folding, Algebraic Simplifications and Reassociation.
 ** ABCelim: Array Bounds Check Elimination.
 ** CSE: Common-Subexpression Elimination.
-** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2020 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_opt_fold_c
@@ -1261,8 +1261,8 @@ LJFOLDF(simplify_conv_narrow)
   IRType t = irt_type(fins->t);
   IRRef op1 = fleft->op1, op2 = fleft->op2, mode = fins->op2;
   PHIBARRIER(fleft);
-  op1 = emitir(IRTI(IR_CONV), op1, mode);
-  op2 = emitir(IRTI(IR_CONV), op2, mode);
+  op1 = emitir(IRT(IR_CONV, t), op1, mode);
+  op2 = emitir(IRT(IR_CONV, t), op2, mode);
   fins->ot = IRT(op, t);
   fins->op1 = op1;
   fins->op2 = op2;

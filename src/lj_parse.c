@@ -1,6 +1,6 @@
 /*
 ** Lua parser (source code -> bytecode).
-** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2020 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -2017,6 +2017,7 @@ static void parse_args(LexState *ls, ExpDesc *e)
 }
 
 static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost);
+
 /* Parse primary expression. */
 static void expr_primary(LexState *ls, ExpDesc *v)
 {
@@ -2866,6 +2867,7 @@ static void inc_dec_op (LexState *ls, BinOpr op, ExpDesc *v, int isPost) {
   bcemit_store(fs, v, &e1);
   if(v != &lv) expr_tonextreg(fs, v);
 }
+
 /* -- Parse statements ---------------------------------------------------- */
 
 /* Parse a statement. Returns 1 if it must be the last one in a chunk. */

@@ -1,6 +1,6 @@
 /*
 ** Trace recorder (bytecode -> SSA IR).
-** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2020 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_record_c
@@ -1860,6 +1860,8 @@ static void rec_varg(jit_State *J, BCReg dst, ptrdiff_t nresults)
       lj_trace_err_info(J, LJ_TRERR_NYIBC);
     }
   }
+  if (J->baseslot + J->maxslot >= LJ_MAX_JSLOTS)
+    lj_trace_err(J, LJ_TRERR_STACKOV);
 }
 
 /* -- Record allocations -------------------------------------------------- */

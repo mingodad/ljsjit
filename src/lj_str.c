@@ -1,6 +1,6 @@
 /*
 ** String handling.
-** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2020 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_str_c
@@ -68,10 +68,10 @@ const char *lj_str_find(const char *s, const char *p, MSize slen, MSize plen)
       int c = *(const uint8_t *)p++;
       plen--; slen -= plen;
       while (slen) {
-        const char *q = (const char *)memchr(s, c, slen);
-        if (!q) break;
-        if (memcmp(q+1, p, plen) == 0) return q;
-        q++; slen -= (MSize)(q-s); s = q;
+	const char *q = (const char *)memchr(s, c, slen);
+	if (!q) break;
+	if (memcmp(q+1, p, plen) == 0) return q;
+	q++; slen -= (MSize)(q-s); s = q;
       }
     }
   }
