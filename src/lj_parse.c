@@ -2240,6 +2240,7 @@ static void expr(LexState *ls, ExpDesc *v)
     bcemit_branch_t(ls->fs, v);  /* skip over block if condition is false */
     condexit = v->f;
     expr(ls, v);  /* eval part for true conditional */
+    expr_tonextreg(fs, v);
     reg = expr_toanyreg(fs, v);  /* set result to reg. */
     jmp_append(fs, &escapelist, bcemit_jmp(fs));  /* must jump over it */
     jmp_tohere(fs, condexit);

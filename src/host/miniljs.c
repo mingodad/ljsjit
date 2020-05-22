@@ -4527,6 +4527,7 @@ if(v->k==VNIL)v->k=VFALSE;
 luaK_goiftrue(ls->fs,v);
 condexit=v->f;
 expr(ls,v);
+luaK_exp2nextreg(fs, v);  /* set result to reg. */
 reg=luaK_exp2anyreg(fs,v);
 luaK_concat(fs,&escapelist,luaK_jump(fs));
 luaK_patchtohere(fs,condexit);
