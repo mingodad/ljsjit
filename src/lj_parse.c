@@ -1331,7 +1331,7 @@ static void fscope_end(FuncState *fs)
       /* fs->pc-1 to jump justo to the loop botton */
       BCPos target = fs->pc - 1;
       if(bl->flags & FSCOPE_FORINLOOP) --target;
-      else if(bl->flags & FSCOPE_DOWHILELOOP) target -= 2;
+      else if(bl->flags & FSCOPE_DOWHILELOOP) target -= 4;
       MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, target);
       ls->vtop = idx;  /* Drop continue label immediately. */
       gola_resolve(ls, bl, idx);
