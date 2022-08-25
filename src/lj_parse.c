@@ -1326,20 +1326,6 @@ static void fscope_end(FuncState *fs)
       return;
     }
   }
-  if ((bl->flags & FSCOPE_CONTINUE)) {
-    if ((bl->flags & FSCOPE_LOOP)) {
-      /* fs->pc-1 to jump justo to the loop botton */
-      BCPos target = fs->pc - 1;
-      if(bl->flags & FSCOPE_FORINLOOP) --target;
-      else if(bl->flags & FSCOPE_DOWHILELOOP) target -= 4;
-      MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, target);
-      ls->vtop = idx;  /* Drop continue label immediately. */
-      gola_resolve(ls, bl, idx);
-    } else {  /* Need the fixup step to propagate the continues. */
-      gola_fixup(ls, bl);
-      return;
-    }
-  }
   if ((bl->flags & FSCOPE_GOLA)) {
     gola_fixup(ls, bl);
   }
@@ -2634,6 +2620,10 @@ static void parse_while(LexState *ls, BCLine line)
   fscope_begin(fs, &bl, FSCOPE_LOOP);
   loop = bcemit_AD(fs, BC_LOOP, fs->nactvar, 0);
   parse_block(ls);
+  if(fs->bl->flags | FSCOPE_CONTINUE) {
+    MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, fs->pc);
+    gola_resolve(ls, fs->bl, idx);
+  }
   jmp_patch(fs, bcemit_jmp(fs), start);
   fscope_end(fs);
   jmp_tohere(fs, condexit);
@@ -2656,6 +2646,10 @@ static void parse_do_while(LexState *ls, BCLine line)
   lex_check(ls, '}');
   lex_match(ls, TK_while, TK_do, line);
   lex_check(ls, '(');
+  if(fs->bl->flags | FSCOPE_CONTINUE) {
+    MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, fs->pc);
+    gola_resolve(ls, fs->bl, idx);
+  }
   line = ls->linenumber;
   condexit = expr_nocond(ls);  /* Parse condition (still inside inner scope). */
   lex_match(ls, ')', '(', line);
@@ -2702,6 +2696,10 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line)
   var_add(ls, 1);
   bcreg_reserve(fs, 1);
   parse_block(ls);
+  if(fs->bl->flags | FSCOPE_CONTINUE) {
+    MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, fs->pc);
+    gola_resolve(ls, fs->bl, idx);
+  }
   fscope_end(fs);
   /* Perform loop inversion. Loop control instructions are at the end. */
   loopend = bcemit_AJ(fs, BC_FORL, base, NO_JMP);
@@ -2774,6 +2772,10 @@ static void parse_for_iter(LexState *ls, GCstr *indexname)
   var_add(ls, nvars-3);
   bcreg_reserve(fs, nvars-3);
   parse_block(ls);
+  if(fs->bl->flags | FSCOPE_CONTINUE) {
+    MSize idx = gola_new(ls, NAME_CONTINUE, VSTACK_LABEL, fs->pc);
+    gola_resolve(ls, fs->bl, idx);
+  }
   fscope_end(fs);
   /* Perform loop inversion. Loop control instructions are at the end. */
   jmp_patchins(fs, loop, fs->pc);
